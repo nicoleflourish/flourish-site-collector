@@ -1577,12 +1577,27 @@
             if (type === 'property') {
                 state.propertyData.property.sketch = dataURL;
                 state.propertyData.save();
+                // Update ONLY the sketch preview, not the entire form
+                const sketchContainer = document.querySelector('#propertySketchContainer');
+                if (sketchContainer) {
+                    sketchContainer.innerHTML = `
+                        <div class="mb-2">
+                            <img src="${dataURL}" class="w-full border rounded-lg" style="max-height: 300px; object-fit: contain;">
+                        </div>
+                        <button onclick="removePropertySketch()" type="button"
+                            class="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                            Remove Sketch
+                        </button>
+                    `;
+                }
             } else if (type === 'project') {
                 state.currentProject.sketch = dataURL;
+                // Update project sketch preview
+                updateProjectSketchDisplay();
             }
             
             closeSketchCanvas();
-            render();
+            // DON'T call render() - it wipes out form data!
         }
 
         function closeSketchCanvas() {
