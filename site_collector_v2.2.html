@@ -298,6 +298,15 @@
                 this.path_width_ft = 3.0;
                 this.path_material = '';
                 this.path_material_price = 0;
+                this.has_patio = false;
+                this.patio_area_sqft = 0;
+                this.patio_type = 'simple_pavers';
+                this.patio_material = '';
+                this.patio_material_price = 0;
+                this.patio_gravel = '';
+                this.patio_gravel_price = 0;
+                this.patio_needs_hauling = false;
+                this.patio_needs_cleanup = false;
                 this.photos = [];
                 this.sketch = null;
                 this.labor_tasks = []; // Labor-only tasks
@@ -328,6 +337,17 @@
                         material: this.path_material,
                         price: this.path_material_price
                     } : null,
+                    patios: this.has_patio ? [{
+                        area_sqft: this.patio_area_sqft,
+                        patio_type: this.patio_type,
+                        paver_type: this.patio_material,
+                        pallet_price: this.patio_material_price,
+                        gravel_type: this.patio_gravel,
+                        gravel_price: this.patio_gravel_price,
+                        complexity: this.patio_type === 'pavers_with_design' ? 1.15 : 1.0,
+                        needs_hauling: this.patio_needs_hauling,
+                        needs_cleanup: this.patio_needs_cleanup
+                    }] : [],
                     photos: this.photos,
                     sketch: this.sketch
                 };
@@ -369,6 +389,10 @@
                 { id: 'pea_gravel', name: 'Pea Gravel', price: 50 },
                 { id: 'decomposed_granite', name: 'Decomposed Granite', price: 48 },
                 { id: 'crushed_granite', name: 'Crushed Granite', price: 45 }
+            ],
+            pavers: [
+                { id: 'holland_4x8', name: 'Holland Pavers 4x8" - $1200/pallet (480 pcs)', price: 1200 },
+                { id: 'square_stepping', name: 'Square Stepping Stones 18x18" - $14 each', price: 14 }
             ]
         };
 
@@ -440,7 +464,7 @@
                     <!-- Property Photos -->
                     <div class="border-t pt-4">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Property Photos (1-2 overall shots)</label>
-                        <div class="text-xs text-gray-500 mb-2">ðŸ“· Take new photo or ðŸ“ browse existing photos from your iPad</div>
+                        <div class="text-xs text-gray-500 mb-2">Take new photo or browse existing photos from your iPad</div>
                         <input type="file" id="propertyPhotos" accept="image/*" multiple
                             onchange="handlePropertyPhotos(event)"
                             class="w-full px-4 py-3 border rounded-lg">
@@ -451,7 +475,7 @@
                                         <img src="${photo}" class="photo-preview rounded border">
                                         <button onclick="removePropertyPhoto(${i})" type="button"
                                             class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs hover:bg-red-600">
-                                            Ã—
+                                            ×
                                         </button>
                                     </div>
                                 `).join('')}
@@ -473,7 +497,7 @@
                         ` : `
                             <button onclick="showPropertySketch()" type="button"
                                 class="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                                âœï¸ Draw Property Sketch
+                                Draw Property Sketch
                             </button>
                         `}
                     </div>
@@ -491,7 +515,7 @@
                                 Projects for ${state.propertyData.property.clientName || 'Property'}
                             </h2>
                             <button onclick="startOver()" class="text-sm text-red-600 hover:text-red-700">
-                                ðŸ—‘ï¸ Start Over
+                                Start Over
                             </button>
                         </div>
                         
@@ -508,9 +532,9 @@
                                             <div class="flex-1">
                                                 <h3 class="font-bold text-gray-800">${proj.name}</h3>
                                                 <div class="text-sm text-gray-600 mt-2 space-y-1">
-                                                    ${proj.area_sqft > 0 ? `<p>â€¢ Area: ${proj.area_sqft} sq ft</p>` : ''}
-                                                    ${proj.plants.length > 0 ? `<p>â€¢ Plants: ${proj.plants.length} types, ${proj.plants.reduce((sum, p) => sum + p.quantity, 0)} total</p>` : ''}
-                                                    ${proj.photos.length > 0 ? `<p>â€¢ Photos: ${proj.photos.length}</p>` : ''}
+                                                    ${proj.area_sqft > 0 ? `<p>• Area: ${proj.area_sqft} sq ft</p>` : ''}
+                                                    ${proj.plants.length > 0 ? `<p>• Plants: ${proj.plants.length} types, ${proj.plants.reduce((sum, p) => sum + p.quantity, 0)} total</p>` : ''}
+                                                    ${proj.photos.length > 0 ? `<p>• Photos: ${proj.photos.length}</p>` : ''}
                                                 </div>
                                             </div>
                                             <div class="flex gap-2 ml-4">
@@ -538,7 +562,7 @@
                     ${projects.length > 0 ? `
                         <button onclick="calculateAndShowProposal()" 
                             class="w-full bg-blue-600 text-white py-4 rounded-lg font-medium text-lg hover:bg-blue-700">
-                            ðŸ’° Calculate Proposal
+                            Calculate Proposal
                         </button>
                     ` : ''}
                 </div>
@@ -572,7 +596,7 @@
                     <!-- PROJECT PHOTOS -->
                     <div class="border-t pt-4">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Project Photos (1-2 shots of this area)</label>
-                        <div class="text-xs text-gray-500 mb-2">ðŸ“· Take new photo or ðŸ“ browse existing photos from your iPad</div>
+                        <div class="text-xs text-gray-500 mb-2">Take new photo or browse existing photos from your iPad</div>
                         <input type="file" id="projectPhotos" accept="image/*" multiple
                             onchange="handleProjectPhotos(event)"
                             class="w-full px-4 py-3 border rounded-lg">
@@ -583,7 +607,7 @@
                                         <img src="${photo}" class="photo-preview rounded border">
                                         <button onclick="removeProjectPhoto(${i})" type="button"
                                             class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs hover:bg-red-600">
-                                            Ã—
+                                            ×
                                         </button>
                                     </div>
                                 `).join('')}
@@ -604,7 +628,7 @@
                                         placeholder="200">
                                     <button onclick="showAreaCalculator()" type="button"
                                         class="px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 whitespace-nowrap">
-                                        ðŸ“ Calculate
+                                         Calculate
                                     </button>
                                 </div>
                             </div>
@@ -680,7 +704,7 @@
                                 <div class="flex gap-2 items-center p-3 bg-gray-50 rounded border">
                                     <div class="flex-1 text-sm">
                                         <strong>${plant.name}</strong> (${plant.size}) - 
-                                        ${plant.quantity} Ã— $${plant.unit_price.toFixed(2)}
+                                        ${plant.quantity} × $${plant.unit_price.toFixed(2)}
                                     </div>
                                     <button onclick="removePlantFromForm(${i})" 
                                         class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">
@@ -775,8 +799,6 @@
                                     <select id="pathType" onchange="updatePathMaterials()"
                                         class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-green-500">
                                         <option value="paver_gravel" ${p.path_type === 'paver_gravel' ? 'selected' : ''}>Paver + Gravel</option>
-                                        <option value="full_pavers" ${p.path_type === 'full_pavers' ? 'selected' : ''}>All Pavers</option>
-                                        <option value="paver_design" ${p.path_type === 'paver_design' ? 'selected' : ''}>Pavers with Small Designs</option>
                                         <option value="flagstone" ${p.path_type === 'flagstone' ? 'selected' : ''}>Flagstone</option>
                                         <option value="dg" ${p.path_type === 'dg' ? 'selected' : ''}>Decomposed Granite</option>
                                     </select>
@@ -803,6 +825,77 @@
                         </div>
                     </div>
 
+                    <!-- PATIO -->
+                    <div class="border-t pt-4">
+                        <label class="flex items-center gap-2 mb-3">
+                            <input type="checkbox" id="hasPatio" ${p.has_patio ? 'checked' : ''}
+                                onchange="togglePatioSection()"
+                                class="w-5 h-5 text-green-600">
+                            <span class="font-bold text-gray-800">This project includes a patio</span>
+                        </label>
+
+                        <div id="patioSection" class="space-y-3 ${p.has_patio ? '' : 'hidden'}">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Area (sq ft)</label>
+                                    <div class="flex gap-2">
+                                        <input type="number" id="patioArea" value="${p.patio_area_sqft || ''}"
+                                            class="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-green-500"
+                                            placeholder="200">
+                                        <button onclick="showPatioAreaCalculator()" type="button"
+                                            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 whitespace-nowrap">
+                                            Calc
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                    <select id="patioType" onchange="updatePatioMaterials()"
+                                        class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-green-500">
+                                        <option value="simple_pavers" ${p.patio_type === 'simple_pavers' ? 'selected' : ''}>Simple Pavers</option>
+                                        <option value="pavers_with_design" ${p.patio_type === 'pavers_with_design' ? 'selected' : ''}>Pavers with Design</option>
+                                        <option value="gravel" ${p.patio_type === 'gravel' ? 'selected' : ''}>Gravel</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="patioMaterialSelect" class="${p.patio_type === 'gravel' ? 'hidden' : ''}">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Paver Material</label>
+                                <select id="patioMaterial" class="w-full px-3 py-2 border rounded">
+                                    ${MATERIALS.pavers.map(pv => `
+                                        <option value="${pv.id}" data-price="${pv.price}" ${p.patio_material === pv.id ? 'selected' : ''}>
+                                            ${pv.name} - $${pv.price}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+
+                            <div id="patioGravelSelect" class="${p.patio_type === 'gravel' ? '' : 'hidden'}">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Gravel Material</label>
+                                <select id="patioGravel" class="w-full px-3 py-2 border rounded">
+                                    ${MATERIALS.gravel.map(g => `
+                                        <option value="${g.id}" data-price="${g.price}" ${p.patio_gravel === g.id ? 'selected' : ''}>
+                                            ${g.name} - $${g.price}/cuyd
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" id="patioNeedsHauling" ${p.patio_needs_hauling ? 'checked' : ''}
+                                        class="w-5 h-5 text-green-600">
+                                    <span class="text-sm">Needs hauling ($200)</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" id="patioNeedsCleanup" ${p.patio_needs_cleanup ? 'checked' : ''}
+                                        class="w-5 h-5 text-green-600">
+                                    <span class="text-sm">Needs cleanup ($100)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- PROJECT SKETCH -->
                     <div class="border-t pt-4">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Project Sketch (Optional)</label>
@@ -818,7 +911,7 @@
                         ` : `
                             <button onclick="showProjectSketch()" type="button"
                                 class="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                                âœï¸ Draw Project Sketch
+                                Draw Project Sketch
                             </button>
                         `}
                     </div>
@@ -918,29 +1011,29 @@
                     <div class="space-y-3">
                         <button onclick="exportJSON()" 
                             class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700">
-                            ðŸ“¥ Download JSON File
+                            Download JSON File
                         </button>
                         
                         <button onclick="emailJSON()" 
                             class="w-full bg-purple-600 text-white py-3 rounded-lg font-medium hover:bg-purple-700">
-                            ðŸ“§ Email JSON to Myself
+                            Email JSON to Myself
                         </button>
                         
                         <button onclick="copyJSON()" 
                             class="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700">
-                            ðŸ“‹ Copy JSON to Clipboard
+                            Copy JSON to Clipboard
                         </button>
                         
                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
                             <p class="text-xs text-blue-800">
-                                ðŸ’¡ <strong>Tip:</strong> Email or copy JSON to save this proposal. 
+                                <strong>Tip:</strong> Email or copy JSON to save this proposal. 
                                 You can edit and generate PDFs later at your desk.
                             </p>
                         </div>
                         
                         <button onclick="navigate('projects_list')" 
                             class="w-full bg-gray-200 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-300">
-                            â† Back to Projects
+                             Back to Projects
                         </button>
                     </div>
                 </div>
@@ -1062,7 +1155,7 @@
                         <img src="${photo}" class="photo-preview rounded border">
                         <button onclick="removePropertyPhoto(${i})" 
                             class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs hover:bg-red-600">
-                            Ã—
+                            ×
                         </button>
                     </div>
                 `).join('');
@@ -1177,6 +1270,35 @@
                 }
             }
             
+            const hasPatioInput = document.getElementById('hasPatio');
+            p.has_patio = hasPatioInput ? hasPatioInput.checked : false;
+            
+            if (p.has_patio) {
+                const patioAreaInput = document.getElementById('patioArea');
+                p.patio_area_sqft = patioAreaInput ? (parseFloat(patioAreaInput.value) || 0) : 0;
+                
+                const patioTypeInput = document.getElementById('patioType');
+                p.patio_type = patioTypeInput ? patioTypeInput.value : 'simple_pavers';
+                
+                const patioMaterialSelect = document.getElementById('patioMaterial');
+                if (patioMaterialSelect && p.patio_type !== 'gravel') {
+                    p.patio_material = patioMaterialSelect.value;
+                    p.patio_material_price = parseFloat(patioMaterialSelect.selectedOptions[0]?.dataset.price) || 0;
+                }
+                
+                const patioGravelSelect = document.getElementById('patioGravel');
+                if (patioGravelSelect && p.patio_type === 'gravel') {
+                    p.patio_gravel = patioGravelSelect.value;
+                    p.patio_gravel_price = parseFloat(patioGravelSelect.selectedOptions[0]?.dataset.price) || 0;
+                }
+                
+                const patioNeedsHaulingInput = document.getElementById('patioNeedsHauling');
+                p.patio_needs_hauling = patioNeedsHaulingInput ? patioNeedsHaulingInput.checked : false;
+                
+                const patioNeedsCleanupInput = document.getElementById('patioNeedsCleanup');
+                p.patio_needs_cleanup = patioNeedsCleanupInput ? patioNeedsCleanupInput.checked : false;
+            }
+            
             // Save or update
             try {
                 if (state.editingProjectIndex !== null) {
@@ -1237,7 +1359,7 @@
                         <img src="${photo}" class="photo-preview rounded border">
                         <button onclick="removeProjectPhoto(${i})" 
                             class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs hover:bg-red-600">
-                            Ã—
+                            ×
                         </button>
                     </div>
                 `).join('');
@@ -1319,7 +1441,7 @@
                                 class="w-full px-4 py-3 border rounded-lg" placeholder="10" step="0.1">
                         </div>
                         <div class="text-xs text-gray-500">
-                            ðŸ’¡ Radius = half the diameter (distance across circle)
+                            Radius = half the diameter (distance across circle)
                         </div>
                     </div>
                 `;
@@ -1337,7 +1459,7 @@
                                 class="w-full px-4 py-3 border rounded-lg" placeholder="8" step="0.1">
                         </div>
                         <div class="text-xs text-gray-500">
-                            ðŸ’¡ This estimates curved beds as ~75% of rectangle area
+                            This estimates curved beds as ~75% of rectangle area
                         </div>
                     </div>
                 `;
@@ -1577,27 +1699,12 @@
             if (type === 'property') {
                 state.propertyData.property.sketch = dataURL;
                 state.propertyData.save();
-                // Update ONLY the sketch preview, not the entire form
-                const sketchContainer = document.querySelector('#propertySketchContainer');
-                if (sketchContainer) {
-                    sketchContainer.innerHTML = `
-                        <div class="mb-2">
-                            <img src="${dataURL}" class="w-full border rounded-lg" style="max-height: 300px; object-fit: contain;">
-                        </div>
-                        <button onclick="removePropertySketch()" type="button"
-                            class="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
-                            Remove Sketch
-                        </button>
-                    `;
-                }
             } else if (type === 'project') {
                 state.currentProject.sketch = dataURL;
-                // Update project sketch preview
-                updateProjectSketchDisplay();
             }
             
             closeSketchCanvas();
-            // DON'T call render() - it wipes out form data!
+            render();
         }
 
         function closeSketchCanvas() {
@@ -1672,7 +1779,7 @@
                 <div class="flex gap-2 items-center p-3 bg-gray-50 rounded border">
                     <div class="flex-1 text-sm">
                         <strong>${plant.name}</strong> (${plant.size}) - 
-                        ${plant.quantity} Ã— $${plant.unit_price.toFixed(2)}
+                        ${plant.quantity} × $${plant.unit_price.toFixed(2)}
                     </div>
                     <button onclick="removePlantFromForm(${i})" 
                         class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">
@@ -1823,12 +1930,6 @@
                         `).join('')}
                     </select>
                 `;
-            } else if (pathType === 'full_pavers' || pathType === 'paver_design') {
-                container.innerHTML = `
-                    <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded border border-blue-200">
-                        <strong>Note:</strong> Paver details (dimensions, pricing) will be entered in the desktop calculator.
-                    </div>
-                `;
             } else {
                 container.innerHTML = `
                     <label class="block text-sm font-medium text-gray-700 mb-1">Material</label>
@@ -1842,6 +1943,60 @@
                 `;
             }
         }
+
+        // ============================================
+        // PATIO FUNCTIONS
+        // ============================================
+
+        function togglePatioSection() {
+            const checked = document.getElementById('hasPatio').checked;
+            document.getElementById('patioSection').classList.toggle('hidden', !checked);
+        }
+
+        function updatePatioMaterials() {
+            const patioType = document.getElementById('patioType').value;
+            const paverSelect = document.getElementById('patioMaterialSelect');
+            const gravelSelect = document.getElementById('patioGravelSelect');
+            
+            if (patioType === 'gravel') {
+                paverSelect.classList.add('hidden');
+                gravelSelect.classList.remove('hidden');
+            } else {
+                paverSelect.classList.remove('hidden');
+                gravelSelect.classList.add('hidden');
+            }
+        }
+
+        function showPatioAreaCalculator() {
+            showAreaCalculator('patio');
+        }
+
+        // Modified showAreaCalculator to support patio
+        const originalShowAreaCalculator = showAreaCalculator;
+        showAreaCalculator = function(target = 'bed') {
+            window.areaCalculatorTarget = target;
+            originalShowAreaCalculator();
+        };
+
+        // Modified applyCalculatedArea to support patio
+        const originalApplyCalculatedArea = applyCalculatedArea;
+        applyCalculatedArea = function() {
+            const area = parseFloat(document.getElementById('calculatedArea').textContent);
+            const target = window.areaCalculatorTarget || 'bed';
+            
+            if (target === 'patio') {
+                const patioAreaInput = document.getElementById('patioArea');
+                if (patioAreaInput) {
+                    patioAreaInput.value = Math.round(area);
+                }
+            } else {
+                const bedAreaInput = document.getElementById('bedArea');
+                if (bedAreaInput) {
+                    bedAreaInput.value = Math.round(area);
+                }
+            }
+            closeAreaCalculator();
+        };
 
         // ============================================
         // PROPOSAL
@@ -1917,7 +2072,7 @@ Generated by Flourish Site Collector v2.2
             // Try modern clipboard API first
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(jsonString).then(() => {
-                    alert('âœ… JSON copied to clipboard!\n\nYou can paste it into:\n- Notes app\n- Email\n- Google Drive document\n- Any text editor');
+                    alert('Ã¢Å“â€¦ JSON copied to clipboard!\n\nYou can paste it into:\n- Notes app\n- Email\n- Google Drive document\n- Any text editor');
                 }).catch(err => {
                     // Fallback for clipboard API failure
                     fallbackCopy(jsonString);
@@ -1938,16 +2093,16 @@ Generated by Flourish Site Collector v2.2
             
             try {
                 document.execCommand('copy');
-                alert('âœ… JSON copied to clipboard!\n\nYou can paste it into:\n- Notes app\n- Email\n- Google Drive document\n- Any text editor');
+                alert('Ã¢Å“â€¦ JSON copied to clipboard!\n\nYou can paste it into:\n- Notes app\n- Email\n- Google Drive document\n- Any text editor');
             } catch (err) {
-                alert('âŒ Could not copy automatically.\n\nPlease use "Download JSON" instead.');
+                alert('Ã¢ÂÅ’ Could not copy automatically.\n\nPlease use "Download JSON" instead.');
             }
             
             document.body.removeChild(textarea);
         }
 
         function startOver() {
-            if (confirm('âš ï¸ This will delete all data and start over. Are you sure?')) {
+            if (confirm('Ã¢Å¡Â Ã¯Â¸Â This will delete all data and start over. Are you sure?')) {
                 localStorage.removeItem('flourish_property_data');
                 state.propertyData = new PropertyData();
                 navigate('property_info');
