@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flourish Design Editor v3.0 - Design Integration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .incomplete { border-left: 4px solid #ef4444; background-color: #fef2f2; }
+        .complete { border-left: 4px solid #22c55e; }
+        .warning { background-color: #fef3c7; border-left: 4px solid #f59e0b; }
+        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal.active { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; border-radius: 0.5rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto p-6">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Flourish Design Editor</h1>
+            <p class="text-gray-600">Complete design workstation - start from scratch or load existing data</p>
+        </div>
+
+        <!-- Load or Create Section -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Start Your Design</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Load Existing JSON
+                    </label>
+                    <input type="file" id="jsonFileInput" accept=".json"
+                        class="w-full px-4 py-3 border rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Or Start Fresh
+                    </label>
+                    <button onclick="createNewProposal()" 
+                        class="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700">
+                        New Proposal
+                    </button>
+                </div>
+            </div>
+            <div id="loadStatus" class="hidden mt-4">
+                <div class="p-4 rounded-lg bg-green-50 border border-green-200">
+                    <p class="text-green-800 font-medium" id="loadedInfo"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Info (shown when data loaded) -->
+        <div id="clientInfo" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Client Information</h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                    <input type="text" id="clientName" onchange="updateClientInfo('client_name', this.value)"
+                        class="w-full px-3 py-2 border rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input type="text" id="clientAddress" onchange="updateClientInfo('address', this.value)"
+                        class="w-full px-3 py-2 border rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input type="text" id="clientPhone" onchange="updateClientInfo('phone', this.value)"
+                        class="w-full px-3 py-2 border rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="clientEmail" onchange="updateClientInfo('email', this.value)"
+                        class="w-full px-3 py-2 border rounded">
+                </div>
+            </div>
+            
+            <!-- Property Sketch (integrated into client section) -->
+            <div id="propertySketchContainer" class="hidden border-t pt-4">
+                <h3 class="font-bold text-gray-800 mb-3">Property Sketch</h3>
+                <div id="propertySketchDisplay">
+                    <!-- Property sketch will be displayed here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects List -->
+        <div id="projectsList" class="hidden space-y-4 mb-6">
+            <!-- Projects will be rendered here -->
+        </div>
+
+        <!-- Add Project Button -->
+        <div id="addProjectSection" class="hidden mb-6">
+            <button onclick="addNewProject()" 
+                class="w-full bg-blue-600 text-white py-4 rounded-lg font-medium text-lg hover:bg-blue-700">
+                + Add New Project
+            </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div id="actionButtons" class="hidden bg-white rounded-lg shadow p-6 space-y-4">
+            <button onclick="saveDesignJSON()" 
+                class="w-full bg-blue-600 text-white py-4 rounded-lg font-medium text-lg hover:bg-blue-700">
+                Save Complete Design JSON
+            </button>
+            <div class="text-center text-sm text-gray-500">
+                <p>After saving, run: <code class="bg-gray-100 px-2 py-1 rounded">python generate_from_site_collector.py [filename].json</code></p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Area Calculator Modal -->
+    <div id="areaCalculatorModal" class="modal">
+        <div class="modal-content p-6">
+            <h3 class="text-xl font-bold mb-4">Area Calculator</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Bed Shape</label>
+                    <select id="bedShape" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                        <option value="rectangle">Rectangle</option>
+                        <option value="circle">Circle</option>
+                        <option value="irregular">Irregular Shape</option>
+                    </select>
+                </div>
+                <div id="rectangleInputs" class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Length (ft)</label>
+                        <input type="number" id="rectLength" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Width (ft)</label>
+                        <input type="number" id="rectWidth" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <div id="circleInputs" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Radius (ft)</label>
+                        <input type="number" id="circleRadius" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                        <p class="text-xs text-gray-500 mt-1">Radius = half the diameter</p>
+                    </div>
+                </div>
+                <div id="irregularInputs" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Approximate Length (ft)</label>
+                        <input type="number" id="irregLength" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Approximate Width (ft)</label>
+                        <input type="number" id="irregWidth" onchange="updateAreaCalc()" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <p class="text-xs text-gray-500">Estimates curved beds as ~75% of rectangle area</p>
+                </div>
+                <div class="p-4 bg-blue-50 rounded">
+                    <p class="text-sm font-medium text-blue-900">
+                        Total Area: <span id="calcArea" class="text-xl">0.0</span> sq ft
+                    </p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="cancelAreaCalc()" class="flex-1 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+                        Cancel
+                    </button>
+                    <button onclick="useCalculatedArea()" class="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                        Use This Area
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plant Editor Modal -->
+    <div id="plantEditorModal" class="modal">
+        <div class="modal-content p-6">
+            <h3 class="text-xl font-bold mb-4" id="plantModalTitle">Add Plant</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Plant Name</label>
+                    <input type="text" id="plantName" placeholder="e.g., Native Muhly Grass" 
+                        class="w-full px-3 py-2 border rounded">
+                    <p class="text-xs text-gray-500 mt-1">Common name or botanical name</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Size / Container</label>
+                    <select id="plantSize" class="w-full px-3 py-2 border rounded">
+                        <option value="">Select size...</option>
+                        <optgroup label="Container Sizes">
+                            <option value="1 gal">1 gallon</option>
+                            <option value="3 gal">3 gallon</option>
+                            <option value="5 gal">5 gallon</option>
+                            <option value="7 gal">7 gallon</option>
+                            <option value="10 gal">10 gallon</option>
+                            <option value="15 gal">15 gallon</option>
+                        </optgroup>
+                        <optgroup label="Numbered Sizes">
+                            <option value="#1">#1 container</option>
+                            <option value="#2">#2 container</option>
+                            <option value="#3">#3 container</option>
+                            <option value="#5">#5 container</option>
+                            <option value="#7">#7 container</option>
+                            <option value="#10">#10 container</option>
+                            <option value="#15">#15 container</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                            <option value="4 inch pot">4 inch pot</option>
+                            <option value="6 inch pot">6 inch pot</option>
+                            <option value="quart">Quart</option>
+                            <option value="flat">Flat (multiple)</option>
+                            <option value="bare root">Bare root</option>
+                        </optgroup>
+                    </select>
+                    <button onclick="customPlantSize()" class="text-sm text-blue-600 hover:underline mt-1">
+                        Enter custom size
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Quantity</label>
+                        <input type="number" id="plantQuantity" min="1" value="1" 
+                            onchange="updatePlantTotal()"
+                            class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Unit Price ($)</label>
+                        <input type="number" id="plantUnitPrice" step="0.01" min="0" value="0" 
+                            onchange="updatePlantTotal()"
+                            class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <div class="p-4 bg-blue-50 rounded">
+                    <p class="text-sm font-medium text-blue-900">
+                        Total: $<span id="plantTotal">0.00</span>
+                    </p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="cancelPlantEdit()" class="flex-1 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+                        Cancel
+                    </button>
+                    <button onclick="savePlant()" class="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                        Save Plant
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let proposalData = null;
+        let currentEditingProject = null;
+        
+        // Track which projects are expanded (fix for navigation collapse issue)
+        let expandedProjects = new Set();
+
+        // Material catalogs
+        const MATERIALS = {
+            edging: [
+                { id: 'steel_black', name: 'Steel Black (10 ft)', price: 18, length: 10 },
+                { id: 'steel_green', name: 'Steel Green (10 ft)', price: 18, length: 10 },
+                { id: 'benda_black_4', name: 'Benda Board Black 4" (20 ft)', price: 33, length: 20 },
+                { id: 'benda_black_6', name: 'Benda Board Black 6" (20 ft)', price: 68, length: 20 }
+            ],
+            mulch: [
+                { id: 'black_pine', name: 'Black Pine Mulch', price: 47 },
+                { id: 'black_hardwood', name: 'Black Hardwood', price: 46 },
+                { id: 'premium_hardwood', name: 'Premium Hardwood', price: 39 },
+                { id: 'cedar', name: 'Cedar Mulch', price: 38 }
+            ],
+            pavers: [
+                { id: 'standard_12x12', name: '12"x12" Standard', length: 12, width: 12, per_pallet: 90, pallet_price: 350, piece_price: 4.50 },
+                { id: 'standard_16x16', name: '16"x16" Standard', length: 16, width: 16, per_pallet: 72, pallet_price: 400, piece_price: 6.50 },
+                { id: 'standard_24x24', name: '24"x24" Standard', length: 24, width: 24, per_pallet: 36, pallet_price: 550, piece_price: 16.00 },
+                { id: 'custom', name: 'Custom (enter dimensions)', length: 0, width: 0, per_pallet: 0, pallet_price: 0, piece_price: 0 }
+            ],
+            gravel: [
+                { id: 'black_star', name: 'Black Star Gravel', price: 175 },
+                { id: 'crushed_granite', name: 'Crushed Granite', price: 150 },
+                { id: 'pea_gravel', name: 'Pea Gravel', price: 140 }
+            ],
+            flagstone: [
+                { id: 'oklahoma', name: 'Oklahoma Flagstone', price: 450, coverage: 120 },
+                { id: 'pennsylvania', name: 'Pennsylvania Flagstone', price: 500, coverage: 100 }
+            ]
+        };
+
+        // Load JSON file
+        document.getElementById('jsonFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    proposalData = JSON.parse(event.target.result);
+                    displayLoadedData();
+                } catch (error) {
+                    alert('Error loading JSON: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function createNewProposal() {
+            proposalData = {
+                client_name: "",
+                address: "",
+                phone: "",
+                email: "",
+                visit_date: new Date().toISOString().split('T')[0],
+                property_notes: "",
+                property_photos: [],
+                property_sketch: null,
+                projects: [],
+                metadata: {
+                    collected_by: "Design Editor v2.0",
+                    timestamp: new Date().toISOString()
+                }
+            };
+            displayLoadedData();
+        }
+
+        function displayLoadedData() {
+            document.getElementById('loadStatus').classList.remove('hidden');
+            document.getElementById('loadedInfo').textContent = 
+                `Loaded: ${proposalData.client_name || 'New Proposal'} - ${proposalData.projects.length} project(s)`;
+            
+            // Show client info
+            document.getElementById('clientInfo').classList.remove('hidden');
+            document.getElementById('clientName').value = proposalData.client_name || '';
+            document.getElementById('clientAddress').value = proposalData.address || '';
+            document.getElementById('clientPhone').value = proposalData.phone || '';
+            document.getElementById('clientEmail').value = proposalData.email || '';
+            
+            // Display property sketch if available
+            if (proposalData.property_sketch) {
+                document.getElementById('propertySketchContainer').classList.remove('hidden');
+                document.getElementById('propertySketchDisplay').innerHTML = `
+                    <div class="border rounded-lg p-2 bg-gray-50">
+                        <img src="${proposalData.property_sketch}" 
+                             alt="Property Sketch" 
+                             class="w-full cursor-pointer hover:opacity-90 transition-opacity"
+                             onclick="openSketchModal(this.src, 'Property Sketch')"
+                             style="max-height: 400px; object-fit: contain;">
+                    </div>
+                `;
+            } else {
+                document.getElementById('propertySketchContainer').classList.add('hidden');
+            }
+            
+            renderProjects();
+            document.getElementById('projectsList').classList.remove('hidden');
+            document.getElementById('addProjectSection').classList.remove('hidden');
+            document.getElementById('actionButtons').classList.remove('hidden');
+        }
+
+        function updateClientInfo(field, value) {
+            proposalData[field] = value;
+        }
+
+        function addNewProject() {
+            const newProject = {
+                name: `Project ${proposalData.projects.length + 1}`,
+                notes: "",
+                area_sqft: 0,
+                edging_type: "",
+                edging_length_ft: 0,
+                mulch_depth_inches: 0,
+                mulch_cuyd: 0,
+                mulch_price: 0,
+                needs_bed_prep: true,
+                needs_fabric: false,
+                needs_hauling: false,
+                // Design generation fields
+                sun_exposure: "",
+                style_preference: "",
+                wall_sides: [],
+                plants: [],
+                boulders: [],
+                boulder_price_per_ton: 180,
+                wall: null,
+                labor_override: null,
+                labor_notes: "",
+                labor_tasks: [],
+                path: null,
+                photos: [],
+                sketch: null,
+                complexity: 1.0
+            };
+            proposalData.projects.push(newProject);
+            renderProjects();
+        }
+
+        function renderProjects() {
+            // Save which projects were expanded BEFORE clearing the HTML
+            const tempExpanded = new Set();
+            proposalData.projects.forEach((project, index) => {
+                const details = document.getElementById(`project-details-${index}`);
+                if (details && !details.classList.contains('hidden')) {
+                    tempExpanded.add(index);
+                }
+            });
+            expandedProjects = tempExpanded;
+            
+            const container = document.getElementById('projectsList');
+            container.innerHTML = '';
+
+            proposalData.projects.forEach((project, index) => {
+                const completeness = checkProjectCompleteness(project);
+                const statusClass = completeness.complete ? 'complete' : 'incomplete';
+                
+                const projectCard = document.createElement('div');
+                projectCard.className = `bg-white rounded-lg shadow p-6 ${statusClass}`;
+                projectCard.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex-1">
+                            <input type="text" value="${project.name}" 
+                                onchange="updateProject(${index}, 'name', this.value)"
+                                class="text-2xl font-bold text-gray-800 border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 outline-none px-2 -ml-2">
+                            <p class="text-sm text-gray-600 mt-1">
+                                ${completeness.complete ? 
+                                    '<span class="text-green-600 font-medium">[Complete]</span>' : 
+                                    '<span class="text-red-600 font-medium">[Needs Attention]</span>'}
+                            </p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleProjectDetails(${index})" 
+                                class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                                <span id="toggle-${index}">Expand</span>
+                            </button>
+                            <button onclick="deleteProject(${index})" 
+                                class="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+
+                    ${!completeness.complete ? `
+                        <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                            <p class="text-sm font-medium text-yellow-800">Missing or Incomplete:</p>
+                            <ul class="text-sm text-yellow-700 mt-1 ml-4 list-disc">
+                                ${completeness.issues.map(issue => `<li>${issue}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    <div id="project-details-${index}" class="hidden mt-4 space-y-6">
+                        ${renderProjectEditor(project, index)}
+                    </div>
+                `;
+                container.appendChild(projectCard);
+                
+                // Restore expanded state AFTER adding to DOM
+                if (expandedProjects.has(index)) {
+                    const details = document.getElementById(`project-details-${index}`);
+                    const toggle = document.getElementById(`toggle-${index}`);
+                    if (details && toggle) {
+                        details.classList.remove('hidden');
+                        toggle.textContent = 'Collapse';
+                    }
+                }
+            });
+        }
+
+        function checkProjectCompleteness(project) {
+            const issues = [];
+
+            // Check for paver paths
+            if (project.path && (project.path.path_type === 'paver_design' || project.path.path_type === 'full_pavers')) {
+                if (!project.path.paver_length_inches || project.path.paver_length_inches === 0) {
+                    issues.push('Paver dimensions required');
+                }
+                if (!project.path.pieces_per_pallet || project.path.pieces_per_pallet === 0) {
+                    issues.push('Paver pallet info required');
+                }
+            }
+
+            // Check for basic project data
+            if (project.area_sqft > 0) {
+                if (!project.edging_type && project.edging_length_ft > 0) {
+                    issues.push('Edging type not selected');
+                }
+                if (project.mulch_cuyd > 0 && !project.mulch_price) {
+                    issues.push('Mulch price missing');
+                }
+            }
+
+            return {
+                complete: issues.length === 0,
+                issues: issues
+            };
+        }
+
+        function renderProjectEditor(project, index) {
+            return `
+                <!-- Project Sketch -->
+                ${project.sketch ? `
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Project Sketch</h3>
+                    <div class="border rounded-lg p-2 bg-gray-50">
+                        <img src="${project.sketch}" 
+                             alt="Project Sketch" 
+                             class="w-full cursor-pointer hover:opacity-90 transition-opacity"
+                             onclick="openSketchModal('${project.sketch}', '${project.name} Sketch')"
+                             style="max-height: 300px; object-fit: contain;">
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Basic Info -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Basic Information</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Area (sqft)</label>
+                            <div class="flex gap-2">
+                                <input type="number" value="${project.area_sqft || 0}" 
+                                    onchange="updateProject(${index}, 'area_sqft', parseFloat(this.value))"
+                                    class="flex-1 px-3 py-2 border rounded">
+                                <button onclick="openAreaCalculator(${index})"
+                                    class="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                                    Calculate
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Edging Type</label>
+                            <select onchange="updateProject(${index}, 'edging_type', this.value)"
+                                class="w-full px-3 py-2 border rounded">
+                                <option value="">Select Edging Type...</option>
+                                ${MATERIALS.edging.map(e => `
+                                    <option value="${e.id}" ${project.edging_type === e.id ? 'selected' : ''}>
+                                        ${e.name} - $${e.price}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Edging Length (ft)</label>
+                            <input type="number" value="${project.edging_length_ft || 0}"
+                                onchange="updateProject(${index}, 'edging_length_ft', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Design Generation Fields -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Design Generation (Optional)</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Sun Exposure</label>
+                            <div class="space-y-2">
+                                <label class="flex items-center">
+                                    <input type="radio" name="sunExposure_${index}" value="S" 
+                                        ${project.sun_exposure === 'S' ? 'checked' : ''}
+                                        onchange="updateProject(${index}, 'sun_exposure', 'S')"
+                                        class="mr-2">
+                                    <span class="text-sm">☀️ Full Sun (6+ hours)</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="sunExposure_${index}" value="PS"
+                                        ${project.sun_exposure === 'PS' ? 'checked' : ''}
+                                        onchange="updateProject(${index}, 'sun_exposure', 'PS')"
+                                        class="mr-2">
+                                    <span class="text-sm">🌤️ Part Sun (4-6 hours)</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="sunExposure_${index}" value="SH"
+                                        ${project.sun_exposure === 'SH' ? 'checked' : ''}
+                                        onchange="updateProject(${index}, 'sun_exposure', 'SH')"
+                                        class="mr-2">
+                                    <span class="text-sm">🌳 Shade (<4 hours)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Style Preference</label>
+                            <select onchange="updateProject(${index}, 'style_preference', this.value)"
+                                class="w-full px-3 py-2 border rounded">
+                                <option value="">Select Style...</option>
+                                <option value="native" ${project.style_preference === 'native' ? 'selected' : ''}>Native/Natural</option>
+                                <option value="traditional" ${project.style_preference === 'traditional' ? 'selected' : ''}>Traditional</option>
+                                <option value="formal" ${project.style_preference === 'formal' ? 'selected' : ''}>Formal/Structured</option>
+                                <option value="cottage" ${project.style_preference === 'cottage' ? 'selected' : ''}>Cottage Garden</option>
+                                <option value="modern" ${project.style_preference === 'modern' ? 'selected' : ''}>Modern/Contemporary</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Wall Sides</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center">
+                                <input type="checkbox" 
+                                    ${project.wall_sides && project.wall_sides.includes('back') ? 'checked' : ''}
+                                    onchange="updateWallSides(${index}, 'back', this.checked)"
+                                    class="mr-2">
+                                <span class="text-sm">Back Wall</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox"
+                                    ${project.wall_sides && project.wall_sides.includes('left') ? 'checked' : ''}
+                                    onchange="updateWallSides(${index}, 'left', this.checked)"
+                                    class="mr-2">
+                                <span class="text-sm">Left Wall</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox"
+                                    ${project.wall_sides && project.wall_sides.includes('right') ? 'checked' : ''}
+                                    onchange="updateWallSides(${index}, 'right', this.checked)"
+                                    class="mr-2">
+                                <span class="text-sm">Right Wall</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mulch Section -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Mulch</h3>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Depth (inches)</label>
+                            <input type="number" step="0.5" value="${project.mulch_depth_inches || 0}"
+                                onchange="updateProject(${index}, 'mulch_depth_inches', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Cubic Yards</label>
+                            <input type="number" step="0.1" value="${project.mulch_cuyd || 0}"
+                                onchange="updateProject(${index}, 'mulch_cuyd', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Mulch Type</label>
+                            <select onchange="updateMulchType(${index}, this.value)"
+                                class="w-full px-3 py-2 border rounded">
+                                <option value="0">Select Type...</option>
+                                ${MATERIALS.mulch.map(m => `
+                                    <option value="${m.price}" ${project.mulch_price === m.price ? 'selected' : ''}>
+                                        ${m.name} - $${m.price}/cuyd
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 mt-3">
+                        <label class="flex items-center">
+                            <input type="checkbox" ${project.needs_bed_prep ? 'checked' : ''}
+                                onchange="updateProject(${index}, 'needs_bed_prep', this.checked)"
+                                class="mr-2">
+                            <span class="text-sm">Needs bed prep</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" ${project.needs_fabric ? 'checked' : ''}
+                                onchange="updateProject(${index}, 'needs_fabric', this.checked)"
+                                class="mr-2">
+                            <span class="text-sm">Needs fabric</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" ${project.needs_hauling ? 'checked' : ''}
+                                onchange="updateProject(${index}, 'needs_hauling', this.checked)"
+                                class="mr-2">
+                            <span class="text-sm">Needs hauling</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Path Section -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Path</h3>
+                        ${!project.path ? `
+                            <button onclick="addPath(${index})" 
+                                class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+                                + Add Path
+                            </button>
+                        ` : `
+                            <button onclick="removePath(${index})" 
+                                class="px-3 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                Remove Path
+                            </button>
+                        `}
+                    </div>
+                    ${project.path ? renderPathEditor(project.path, index) : '<p class="text-sm text-gray-500">No path configured</p>'}
+                </div>
+
+                <!-- Boulders Section -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Boulders (${project.boulders ? project.boulders.length : 0})</h3>
+                        <button onclick="addBoulder(${index})" 
+                            class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+                            + Add Boulder
+                        </button>
+                    </div>
+                    ${project.boulders && project.boulders.length > 0 ? `
+                        <div class="space-y-2">
+                            ${project.boulders.map((boulder, bIdx) => `
+                                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded">
+                                    <span class="font-medium">${boulder.weight_lbs} lbs</span>
+                                    <button onclick="removeBoulder(${index}, ${bIdx})"
+                                        class="ml-auto px-2 py-1 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                        Remove
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="mt-3">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Price per Ton</label>
+                            <input type="number" value="${project.boulder_price_per_ton || 180}"
+                                onchange="updateProject(${index}, 'boulder_price_per_ton', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                    ` : '<p class="text-sm text-gray-500">No boulders added</p>'}
+                </div>
+
+                <!-- Retaining Wall Section -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Retaining Wall</h3>
+                        ${!project.wall ? `
+                            <button onclick="addWall(${index})" 
+                                class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+                                + Add Wall
+                            </button>
+                        ` : `
+                            <button onclick="removeWall(${index})" 
+                                class="px-3 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                Remove Wall
+                            </button>
+                        `}
+                    </div>
+                    ${project.wall ? `
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Length (linear ft)</label>
+                                <input type="number" value="${project.wall.length_ft || 0}"
+                                    onchange="updateWall(${index}, 'length_ft', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Height (ft)</label>
+                                <input type="number" step="0.5" value="${project.wall.height_ft || 0}"
+                                    onchange="updateWall(${index}, 'height_ft', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Stone Price ($/ton)</label>
+                                <input type="number" value="${project.wall.stone_price_per_ton || 380}"
+                                    onchange="updateWall(${index}, 'stone_price_per_ton', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Coverage: 80 linear ft per ton</p>
+                    ` : '<p class="text-sm text-gray-500">No wall configured</p>'}
+                </div>
+
+                <!-- Labor Tasks Section -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Labor Tasks (${project.labor_tasks ? project.labor_tasks.length : 0})</h3>
+                        <button onclick="addLaborTask(${index})" 
+                            class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+                            + Add Labor Task
+                        </button>
+                    </div>
+                    ${project.labor_tasks && project.labor_tasks.length > 0 ? `
+                        <div class="space-y-2">
+                            ${project.labor_tasks.map((task, tIdx) => `
+                                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded">
+                                    <div class="flex-1">
+                                        <span class="font-medium">${task.description}</span>
+                                        <span class="text-gray-600 text-sm ml-2">$${task.cost}</span>
+                                    </div>
+                                    <button onclick="removeLaborTask(${index}, ${tIdx})"
+                                        class="px-2 py-1 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                        Remove
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p class="text-sm text-gray-500">No labor tasks added</p>'}
+                </div>
+
+                <!-- Plants -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Plants (${project.plants.length})</h3>
+                        <button onclick="addPlant(${index})" 
+                            class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
+                            + Add Plant
+                        </button>
+                    </div>
+                    ${project.plants.length > 0 ? `
+                        <div class="space-y-2">
+                            ${project.plants.map((plant, pIdx) => `
+                                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded">
+                                    <div class="flex-1">
+                                        <span class="font-medium">${plant.name}</span>
+                                        <span class="text-gray-600 text-sm ml-2">${plant.size}</span>
+                                    </div>
+                                    <div class="text-sm text-gray-600">
+                                        ${plant.quantity} Ã— $${plant.unit_price} = $${(plant.quantity * plant.unit_price).toFixed(2)}
+                                    </div>
+                                    <button onclick="editPlant(${index}, ${pIdx})"
+                                        class="px-2 py-1 text-sm bg-blue-100 text-blue-600 rounded hover:bg-blue-200">
+                                        Edit
+                                    </button>
+                                    <button onclick="removePlant(${index}, ${pIdx})"
+                                        class="px-2 py-1 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                        Remove
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p class="text-sm text-gray-500">No plants added yet</p>'}
+                </div>
+
+                <!-- Labor Settings -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Labor Settings</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Project Complexity (1.0 - 1.5)
+                            </label>
+                            <input type="range" min="1.0" max="1.5" step="0.1" 
+                                value="${project.complexity || 1.0}"
+                                onchange="updateProject(${index}, 'complexity', parseFloat(this.value)); updateProjectComplexityDisplay(${index}, this.value)"
+                                class="w-full">
+                            <div class="flex justify-between text-sm text-gray-600">
+                                <span>Standard (1.0x)</span>
+                                <span id="project-complexity-display-${index}" class="font-medium">${(project.complexity || 1.0).toFixed(1)}x</span>
+                                <span>Complex (1.5x)</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">
+                                Affects all labor rates. For paver designs, capped at 1.3x max.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Labor Override (leave 0 for auto-calculation)
+                            </label>
+                            <input type="number" step="50" value="${project.labor_override || 0}"
+                                onchange="updateProject(${index}, 'labor_override', parseFloat(this.value) || null)"
+                                class="w-full px-3 py-2 border rounded">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Set a fixed labor amount, or leave 0 to auto-calculate based on project scope
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPathEditor(path, projectIndex) {
+            return `
+                <div class="space-y-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Length (ft)</label>
+                            <input type="number" value="${path.length_ft || 0}"
+                                onchange="updatePath(${projectIndex}, 'length_ft', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Width (ft)</label>
+                            <input type="number" value="${path.width_ft || 0}"
+                                onchange="updatePath(${projectIndex}, 'width_ft', parseFloat(this.value))"
+                                class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Area (sqft)</label>
+                            <input type="number" value="${path.area_sqft || 0}" readonly
+                                class="w-full px-3 py-2 border rounded bg-gray-50">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Path Type</label>
+                        <select onchange="updatePath(${projectIndex}, 'path_type', this.value); renderProjects()"
+                            class="w-full px-3 py-2 border rounded">
+                            <option value="paver_gravel" ${path.path_type === 'paver_gravel' ? 'selected' : ''}>Pavers + Gravel</option>
+                            <option value="paver_design" ${path.path_type === 'paver_design' ? 'selected' : ''}>Pavers with Small Designs</option>
+                            <option value="full_pavers" ${path.path_type === 'full_pavers' ? 'selected' : ''}>All Pavers</option>
+                            <option value="flagstone" ${path.path_type === 'flagstone' ? 'selected' : ''}>Flagstone</option>
+                            <option value="dg" ${path.path_type === 'dg' ? 'selected' : ''}>Decomposed Granite</option>
+                        </select>
+                    </div>
+
+                    ${(path.path_type === 'paver_design' || path.path_type === 'full_pavers') ? `
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Paver Type</label>
+                            <select onchange="updatePaverType(${projectIndex}, this.value)"
+                                class="w-full px-3 py-2 border rounded">
+                                <option value="">Select Paver Type...</option>
+                                ${MATERIALS.pavers.map(p => `
+                                    <option value="${p.id}">
+                                        ${p.name} ${p.id !== 'custom' ? `- $${p.piece_price}/piece` : ''}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Length (inches)</label>
+                                <input type="number" value="${path.paver_length_inches || 0}"
+                                    onchange="updatePath(${projectIndex}, 'paver_length_inches', parseInt(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Width (inches)</label>
+                                <input type="number" value="${path.paver_width_inches || 0}"
+                                    onchange="updatePath(${projectIndex}, 'paver_width_inches', parseInt(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pieces/Pallet</label>
+                                <input type="number" value="${path.pieces_per_pallet || 0}"
+                                    onchange="updatePath(${projectIndex}, 'pieces_per_pallet', parseInt(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pallet Price</label>
+                                <input type="number" step="0.01" value="${path.pallet_price || 0}"
+                                    onchange="updatePath(${projectIndex}, 'pallet_price', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Piece Price</label>
+                                <input type="number" step="0.01" value="${path.piece_price || 0}"
+                                    onchange="updatePath(${projectIndex}, 'piece_price', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${path.path_type === 'paver_gravel' ? `
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Number of Pavers</label>
+                                <input type="number" value="${path.paver_count || 0}"
+                                    onchange="updatePath(${projectIndex}, 'paver_count', parseInt(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Gravel Type</label>
+                                <select onchange="updatePath(${projectIndex}, 'gravel_price', parseFloat(this.value))"
+                                    class="w-full px-3 py-2 border rounded">
+                                    <option value="0">Select Type...</option>
+                                    ${MATERIALS.gravel.map(g => `
+                                        <option value="${g.price}" ${path.gravel_price === g.price ? 'selected' : ''}>
+                                            ${g.name} - $${g.price}/cuyd
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Area Calculator Functions
+        function openAreaCalculator(projectIndex) {
+            currentEditingProject = projectIndex;
+            document.getElementById('areaCalculatorModal').classList.add('active');
+            updateAreaCalc();
+        }
+
+        function updateAreaCalc() {
+            const shape = document.getElementById('bedShape').value;
+            
+            // Show/hide inputs
+            document.getElementById('rectangleInputs').classList.toggle('hidden', shape !== 'rectangle');
+            document.getElementById('circleInputs').classList.toggle('hidden', shape !== 'circle');
+            document.getElementById('irregularInputs').classList.toggle('hidden', shape !== 'irregular');
+            
+            let area = 0;
+            if (shape === 'rectangle') {
+                const length = parseFloat(document.getElementById('rectLength').value) || 0;
+                const width = parseFloat(document.getElementById('rectWidth').value) || 0;
+                area = length * width;
+            } else if (shape === 'circle') {
+                const radius = parseFloat(document.getElementById('circleRadius').value) || 0;
+                area = Math.PI * radius * radius;
+            } else if (shape === 'irregular') {
+                const length = parseFloat(document.getElementById('irregLength').value) || 0;
+                const width = parseFloat(document.getElementById('irregWidth').value) || 0;
+                area = length * width * 0.75; // 75% of rectangle
+            }
+            
+            document.getElementById('calcArea').textContent = area.toFixed(1);
+        }
+
+        function useCalculatedArea() {
+            const area = parseFloat(document.getElementById('calcArea').textContent);
+            updateProject(currentEditingProject, 'area_sqft', area);
+            document.getElementById('areaCalculatorModal').classList.remove('active');
+            renderProjects();
+        }
+
+        function cancelAreaCalc() {
+            document.getElementById('areaCalculatorModal').classList.remove('active');
+        }
+
+        // Path Functions
+        function addPath(index) {
+            proposalData.projects[index].path = {
+                length_ft: 0,
+                width_ft: 0,
+                area_sqft: 0,
+                path_type: 'paver_gravel',
+                material: "",
+                price: 0,
+                paver_count: 0,
+                paver_size_sqft: 2.0,
+                gravel_price: 0
+            };
+            renderProjects();
+        }
+
+        function removePath(index) {
+            proposalData.projects[index].path = null;
+            renderProjects();
+        }
+
+        function updatePath(index, field, value) {
+            if (!proposalData.projects[index].path) return;
+            
+            proposalData.projects[index].path[field] = value;
+            
+            // Auto-calculate area
+            if (field === 'length_ft' || field === 'width_ft') {
+                const path = proposalData.projects[index].path;
+                path.area_sqft = path.length_ft * path.width_ft;
+            }
+            
+            // Calculate coverage if dimensions change
+            if (field === 'paver_length_inches' || field === 'paver_width_inches') {
+                const path = proposalData.projects[index].path;
+                if (path.paver_length_inches && path.paver_width_inches) {
+                    path.paver_coverage_sqft = (path.paver_length_inches * path.paver_width_inches) / 144;
+                }
+            }
+        }
+
+        function updatePaverType(index, paverId) {
+            const paver = MATERIALS.pavers.find(p => p.id === paverId);
+            if (!paver || paverId === 'custom') return;
+
+            const path = proposalData.projects[index].path;
+            path.paver_length_inches = paver.length;
+            path.paver_width_inches = paver.width;
+            path.pieces_per_pallet = paver.per_pallet;
+            path.pallet_price = paver.pallet_price;
+            path.piece_price = paver.piece_price;
+            path.paver_coverage_sqft = (paver.length * paver.width) / 144;
+
+            renderProjects();
+        }
+
+        // Boulder Functions
+        function addBoulder(index) {
+            const weight = prompt("Boulder weight (lbs):", "200");
+            if (!weight) return;
+            
+            if (!proposalData.projects[index].boulders) {
+                proposalData.projects[index].boulders = [];
+            }
+            
+            proposalData.projects[index].boulders.push({
+                weight_lbs: parseInt(weight)
+            });
+            
+            renderProjects();
+        }
+
+        function removeBoulder(projectIndex, boulderIndex) {
+            proposalData.projects[projectIndex].boulders.splice(boulderIndex, 1);
+            renderProjects();
+        }
+
+        // Wall Functions
+        function addWall(index) {
+            proposalData.projects[index].wall = {
+                length_ft: 0,
+                height_ft: 0,
+                stone_price_per_ton: 380
+            };
+            renderProjects();
+        }
+
+        function removeWall(index) {
+            proposalData.projects[index].wall = null;
+            renderProjects();
+        }
+
+        function updateWall(index, field, value) {
+            if (!proposalData.projects[index].wall) return;
+            proposalData.projects[index].wall[field] = value;
+        }
+
+        // Labor Task Functions
+        function addLaborTask(index) {
+            const description = prompt("Labor task description:", "");
+            if (!description) return;
+            
+            const cost = prompt("Cost ($):", "0");
+            if (!cost) return;
+            
+            if (!proposalData.projects[index].labor_tasks) {
+                proposalData.projects[index].labor_tasks = [];
+            }
+            
+            proposalData.projects[index].labor_tasks.push({
+                description: description,
+                cost: parseFloat(cost)
+            });
+            
+            renderProjects();
+        }
+
+        function removeLaborTask(projectIndex, taskIndex) {
+            proposalData.projects[projectIndex].labor_tasks.splice(taskIndex, 1);
+            renderProjects();
+        }
+
+        // Plant Functions
+        let editingPlantProject = null;
+        let editingPlantIndex = null;
+
+        function addPlant(projectIndex) {
+            editingPlantProject = projectIndex;
+            editingPlantIndex = null;
+            
+            document.getElementById('plantModalTitle').textContent = 'Add Plant';
+            document.getElementById('plantName').value = '';
+            document.getElementById('plantSize').value = '';
+            document.getElementById('plantQuantity').value = '1';
+            document.getElementById('plantUnitPrice').value = '0';
+            updatePlantTotal();
+            
+            document.getElementById('plantEditorModal').classList.add('active');
+        }
+
+        function editPlant(projectIndex, plantIndex) {
+            editingPlantProject = projectIndex;
+            editingPlantIndex = plantIndex;
+            
+            const plant = proposalData.projects[projectIndex].plants[plantIndex];
+            
+            document.getElementById('plantModalTitle').textContent = 'Edit Plant';
+            document.getElementById('plantName').value = plant.name;
+            document.getElementById('plantSize').value = plant.size;
+            document.getElementById('plantQuantity').value = plant.quantity;
+            document.getElementById('plantUnitPrice').value = plant.unit_price;
+            updatePlantTotal();
+            
+            document.getElementById('plantEditorModal').classList.add('active');
+        }
+
+        function removePlant(projectIndex, plantIndex) {
+            if (confirm('Remove this plant?')) {
+                proposalData.projects[projectIndex].plants.splice(plantIndex, 1);
+                renderProjects();
+            }
+        }
+
+        function updatePlantTotal() {
+            const qty = parseFloat(document.getElementById('plantQuantity').value) || 0;
+            const price = parseFloat(document.getElementById('plantUnitPrice').value) || 0;
+            const total = qty * price;
+            document.getElementById('plantTotal').textContent = total.toFixed(2);
+        }
+
+        function customPlantSize() {
+            const custom = prompt("Enter custom size:", "");
+            if (custom) {
+                const select = document.getElementById('plantSize');
+                // Add as custom option if not exists
+                let found = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === custom) {
+                        found = true;
+                        select.value = custom;
+                        break;
+                    }
+                }
+                if (!found) {
+                    const option = document.createElement('option');
+                    option.value = custom;
+                    option.text = custom;
+                    select.add(option);
+                    select.value = custom;
+                }
+            }
+        }
+
+        function savePlant() {
+            const name = document.getElementById('plantName').value.trim();
+            const size = document.getElementById('plantSize').value;
+            const quantity = parseInt(document.getElementById('plantQuantity').value);
+            const unitPrice = parseFloat(document.getElementById('plantUnitPrice').value);
+            
+            if (!name) {
+                alert('Please enter a plant name');
+                return;
+            }
+            if (!size) {
+                alert('Please select a size');
+                return;
+            }
+            if (quantity <= 0) {
+                alert('Quantity must be greater than 0');
+                return;
+            }
+            
+            const plant = {
+                name: name,
+                size: size,
+                quantity: quantity,
+                unit_price: unitPrice,
+                total_cost: quantity * unitPrice
+            };
+            
+            if (editingPlantIndex !== null) {
+                // Editing existing plant
+                proposalData.projects[editingPlantProject].plants[editingPlantIndex] = plant;
+            } else {
+                // Adding new plant
+                if (!proposalData.projects[editingPlantProject].plants) {
+                    proposalData.projects[editingPlantProject].plants = [];
+                }
+                proposalData.projects[editingPlantProject].plants.push(plant);
+            }
+            
+            cancelPlantEdit();
+            renderProjects();
+        }
+
+        function cancelPlantEdit() {
+            document.getElementById('plantEditorModal').classList.remove('active');
+            editingPlantProject = null;
+            editingPlantIndex = null;
+        }
+
+        // Project Functions
+        function deleteProject(index) {
+            if (confirm('Delete this project?')) {
+                proposalData.projects.splice(index, 1);
+                renderProjects();
+            }
+        }
+
+        function toggleProjectDetails(index) {
+            const details = document.getElementById(`project-details-${index}`);
+            const toggle = document.getElementById(`toggle-${index}`);
+            
+            if (details.classList.contains('hidden')) {
+                details.classList.remove('hidden');
+                toggle.textContent = 'Collapse';
+            } else {
+                details.classList.add('hidden');
+                toggle.textContent = 'Expand';
+            }
+        }
+
+        function updateProject(index, field, value) {
+            proposalData.projects[index][field] = value;
+        }
+
+        function updateMulchType(index, price) {
+            proposalData.projects[index].mulch_price = parseFloat(price);
+        }
+
+        function updateWallSides(index, side, checked) {
+            if (!proposalData.projects[index].wall_sides) {
+                proposalData.projects[index].wall_sides = [];
+            }
+            
+            if (checked) {
+                // Add side if not already present
+                if (!proposalData.projects[index].wall_sides.includes(side)) {
+                    proposalData.projects[index].wall_sides.push(side);
+                }
+            } else {
+                // Remove side
+                proposalData.projects[index].wall_sides = 
+                    proposalData.projects[index].wall_sides.filter(s => s !== side);
+            }
+        }
+
+        function updateProjectComplexityDisplay(index, value) {
+            document.getElementById(`project-complexity-display-${index}`).textContent = `${parseFloat(value).toFixed(1)}x`;
+        }
+
+        function saveDesignJSON() {
+            // Validate all projects are complete
+            const incomplete = proposalData.projects.filter(p => !checkProjectCompleteness(p).complete);
+            
+            if (incomplete.length > 0) {
+                if (!confirm(`${incomplete.length} project(s) still have missing data. Save anyway?`)) {
+                    return;
+                }
+            }
+
+            // Create filename
+            const filename = `${proposalData.client_name.replace(/\s+/g, '_')}_${proposalData.visit_date}_DESIGN.json`;
+            
+            // Download
+            const dataStr = JSON.stringify(proposalData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(url);
+
+            alert(`Saved! Run:\npython generate_from_site_collector.py ${filename}`);
+        }
+
+        // Sketch Modal Functions
+        function openSketchModal(src, title) {
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content p-6" style="max-width: 90vw; max-height: 90vh;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">${title}</h3>
+                        <button onclick="this.closest('.modal').remove()" 
+                                class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                            Close
+                        </button>
+                    </div>
+                    <div class="overflow-auto" style="max-height: calc(90vh - 100px);">
+                        <img src="${src}" alt="${title}" class="w-full" style="object-fit: contain;">
+                    </div>
+                </div>
+            `;
+            modal.onclick = function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            };
+            document.body.appendChild(modal);
+        }
+    </script>
+
+    <!-- Design Generator Modal -->
+    <div id="designGeneratorModal" class="modal">
+        <div class="modal-content p-6" style="max-width: 900px;">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">Generate Garden Design</h2>
+                <button onclick="closeDesignModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+
+            <div id="designConfig" class="space-y-4">
+                <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <h3 class="font-bold text-purple-900 mb-2">Current Design Parameters</h3>
+                    <div class="text-sm text-purple-800" id="currentDesignParams"></div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Select Template</label>
+                    <select id="templateSelect" class="w-full px-3 py-2 border rounded-lg">
+                        <option value="">Choose a template...</option>
+                    </select>
+                </div>
+
+                <button onclick="generateDesignForProject()" 
+                    class="w-full bg-purple-600 text-white py-3 rounded-lg font-medium hover:bg-purple-700">
+                    Generate Design & Populate Plants
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openDesignModal(projectIdx) {
+            // TODO: Implement modal logic
+            alert('Design generator UI ready - integrate with Python backend');
+        }
+        
+        function closeDesignModal() {
+            document.getElementById('designGeneratorModal').classList.remove('active');
+        }
+    </script>
+
+</body>
+</html>
