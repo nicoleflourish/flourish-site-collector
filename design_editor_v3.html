@@ -252,27 +252,63 @@
         // Track which projects are expanded (fix for navigation collapse issue)
         let expandedProjects = new Set();
 
-        // Material catalogs
+        // Material catalogs - Full Tivoli Price List (79 items)
         const MATERIALS = {
-            edging: [
-                { id: 'steel_black', name: 'Steel Black (10 ft)', price: 19.99, length: 10 },
-                { id: 'steel_green', name: 'Steel Green (10 ft)', price: 19.99, length: 10 },
-                { id: 'benda_black_4', name: 'Benda Board Black 4" (20 ft)', price: 33, length: 20 },
-                { id: 'benda_black_6', name: 'Benda Board Black 6" (20 ft)', price: 68, length: 20 },
-                { id: 'benda_brown_4', name: 'Benda Board Brown 4" (20 ft)', price: 33, length: 20 }
-            ],
+            // MULCH (22 items)
             mulch: [
-                { id: 'black_pine', name: 'Black Pine Mulch', price: 47 },
-                { id: 'black_hardwood', name: 'Black Hardwood', price: 46 },
-                { id: 'premium_hardwood', name: 'Premium Hardwood', price: 39 },
-                { id: 'cedar', name: 'Cedar Mulch', price: 38 },
-                { id: 'red_pine', name: 'Red Pine Mulch', price: 38 },
-                { id: 'red_dyed', name: 'Red Dyed Mulch', price: 36 },
-                { id: 'pine_deco', name: 'Pine Deco Mulch', price: 34 },
-                { id: 'humus_compost', name: 'Humus Compost', price: 32 },
-                { id: 'pea_gravel', name: 'Pea Gravel', price: 50 },
-                { id: 'decomposed_granite', name: 'Decomposed Granite', price: 48 },
-                { id: 'crushed_granite', name: 'Crushed Granite', price: 45 }
+                { id: 'mulch_0', name: 'Mexican Beach Pebbles (Black Only) (1/2"-1" (75 lb))', price: 26.0, unit: 'bag' },
+                { id: 'mulch_1', name: 'Mexican Beach Pebbles (Black/Buff/Red) (1"-2" (75 lb))', price: 26.0, unit: 'bag' },
+                { id: 'mulch_2', name: 'Mexican Beach Pebbles (Black/Buff/Red) (3"-5" (75 lb))', price: 26.0, unit: 'bag' },
+                { id: 'mulch_3', name: 'Red Lava Rock (1/2 cf)', price: 5.75, unit: 'bag' },
+                { id: 'mulch_4', name: 'Pebbles - Pea (1/4"-3/4" (1/2 cf))', price: 6.99, unit: 'bag' },
+                { id: 'mulch_5', name: 'Pebbles - Pond (1-1/2"-2-1/2" (1/2 cf))', price: 6.99, unit: 'bag' },
+                { id: 'mulch_6', name: 'Snow White Marble Chips (1/2 cf)', price: 11.99, unit: 'bag' },
+                { id: 'mulch_7', name: 'Black Star Gravel', price: 175.0, unit: 'cu yd' },
+                { id: 'mulch_8', name: 'Decomposed Granite', price: 89.0, unit: 'cu yd' },
+                { id: 'mulch_9', name: 'Red Dyed Mulch', price: 36.0, unit: 'cu yd' },
+                { id: 'mulch_10', name: 'Black Dyed Mulch', price: 30.0, unit: 'cu yd' },
+                { id: 'mulch_11', name: 'Red Pine Mulch', price: 38.0, unit: 'cu yd' },
+                { id: 'mulch_12', name: 'Black Pine Mulch', price: 47.0, unit: 'cu yd' },
+                { id: 'mulch_13', name: 'Pine Deco Mulch', price: 34.0, unit: 'cu yd' },
+                { id: 'mulch_14', name: 'Deco-Hardwood Mulch', price: 24.0, unit: 'cu yd' },
+                { id: 'mulch_15', name: 'Black Hardwood', price: 46.0, unit: 'cu yd' },
+                { id: 'mulch_16', name: 'Premium Hardwood (Pure Hardwood)', price: 39.0, unit: 'cu yd' },
+                { id: 'mulch_17', name: 'Cedar Mulch', price: 38.0, unit: 'cu yd' },
+                { id: 'mulch_18', name: 'Humus Compost', price: 32.0, unit: 'cu yd' },
+                { id: 'mulch_19', name: 'Rice Hull Compost', price: 30.0, unit: 'cu yd' },
+                { id: 'mulch_20', name: 'Compost Mix', price: 36.0, unit: 'cu yd' },
+                { id: 'mulch_21', name: 'Veggie Compost', price: 45.0, unit: 'cu yd' },
+            ],
+            
+            // PATIO GRAVEL (12 items) - For gravel patios
+            patio_gravel: [
+                { id: 'patio_gravel_0', name: 'Black Star Gravel', price: 175.0, unit: 'cu yd' },
+                { id: 'patio_gravel_1', name: '#8 Stone Minus Limestone (3/8")', price: 96.0, unit: 'cu yd' },
+                { id: 'patio_gravel_2', name: '#57 Stone Minus Limestone (1")', price: 96.0, unit: 'cu yd' },
+                { id: 'patio_gravel_3', name: '#2 Stone Limestone (2")', price: 109.0, unit: 'cu yd' },
+                { id: 'patio_gravel_4', name: 'Gravel (3/8")', price: 88.0, unit: 'cu yd' },
+                { id: 'patio_gravel_5', name: 'Gravel (1-1/2")', price: 88.0, unit: 'cu yd' },
+                { id: 'patio_gravel_6', name: 'Bull Rock (2"-4")', price: 88.0, unit: 'cu yd' },
+                { id: 'patio_gravel_7', name: 'Rainbow Gravel (1")', price: 99.0, unit: 'cu yd' },
+                { id: 'patio_gravel_8', name: 'Flexbase Limestone', price: 89.0, unit: 'cu yd' },
+                { id: 'patio_gravel_9', name: 'Crushed Concrete', price: 54.0, unit: 'cu yd' },
+                { id: 'patio_gravel_10', name: 'Milled Asphalt', price: 69.0, unit: 'cu yd' },
+                { id: 'patio_gravel_11', name: 'Decomposed Granite', price: 89.0, unit: 'cu yd' },
+            ],
+            
+            // RETAINING WALLS (3 items)
+            retaining_walls: [
+                { id: 'retaining_wall_0', name: 'Colorado Chopped (2"-4")', price: 380.0, unit: 'ton' },
+                { id: 'retaining_wall_1', name: 'Oklahoma Chopped or Drystacked', price: 300.0, unit: 'ton' },
+                { id: 'retaining_wall_2', name: 'Texas Chopped', price: 220.0, unit: 'ton' },
+            ],
+            
+            // Original materials (for backward compatibility)
+            edging: [
+                { id: 'steel_black', name: 'Steel Black (10 ft)', price: 18, length: 10 },
+                { id: 'steel_green', name: 'Steel Green (10 ft)', price: 18, length: 10 },
+                { id: 'benda_black_4', name: 'Benda Board Black 4" (20 ft)', price: 33, length: 20 },
+                { id: 'benda_black_6', name: 'Benda Board Black 6" (20 ft)', price: 68, length: 20 }
             ],
             pavers: [
                 { id: 'standard_12x12', name: '12"x12" Standard', length: 12, width: 12, per_pallet: 90, pallet_price: 350, piece_price: 4.50 },
@@ -790,6 +826,39 @@
                     ` : '<p class="text-sm text-gray-500">No labor tasks added</p>'}
                 </div>
 
+                <!-- Custom Materials Section -->
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">Custom Materials (${project.custom_materials ? project.custom_materials.length : 0})</h3>
+                        <button onclick="addCustomMaterial(${index})" 
+                            class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700">
+                            + Add Custom Material
+                        </button>
+                    </div>
+                    ${project.custom_materials && project.custom_materials.length > 0 ? `
+                        <div class="space-y-2">
+                            ${project.custom_materials.map((mat, mIdx) => `
+                                <div class="flex items-center gap-3 p-3 bg-purple-50 rounded border border-purple-200">
+                                    <div class="flex-1">
+                                        <span class="font-medium">${mat.name}</span>
+                                    </div>
+                                    <div class="text-sm text-gray-600">
+                                        ${mat.quantity} × $${mat.price.toFixed(2)} = $${(mat.quantity * mat.price).toFixed(2)}
+                                    </div>
+                                    <button onclick="editCustomMaterial(${index}, ${mIdx})"
+                                        class="px-2 py-1 text-sm bg-purple-100 text-purple-600 rounded hover:bg-purple-200">
+                                        Edit
+                                    </button>
+                                    <button onclick="removeCustomMaterial(${index}, ${mIdx})"
+                                        class="px-2 py-1 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200">
+                                        Remove
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p class="text-sm text-gray-500">No custom materials added</p>'}
+                </div>
+
                 <!-- Plants -->
                 <div class="border-t pt-4">
                     <div class="flex justify-between items-center mb-3">
@@ -1132,6 +1201,56 @@
 
         function removeLaborTask(projectIndex, taskIndex) {
             proposalData.projects[projectIndex].labor_tasks.splice(taskIndex, 1);
+            renderProjects();
+        }
+
+        // Custom Materials Functions
+        function addCustomMaterial(index) {
+            const name = prompt("Material name:", "");
+            if (!name) return;
+            
+            const quantity = prompt("Quantity:", "1");
+            if (!quantity) return;
+            
+            const price = prompt("Price per unit ($):", "0");
+            if (!price) return;
+            
+            if (!proposalData.projects[index].custom_materials) {
+                proposalData.projects[index].custom_materials = [];
+            }
+            
+            proposalData.projects[index].custom_materials.push({
+                name: name,
+                quantity: parseInt(quantity),
+                price: parseFloat(price)
+            });
+            
+            renderProjects();
+        }
+
+        function editCustomMaterial(projectIndex, matIndex) {
+            const mat = proposalData.projects[projectIndex].custom_materials[matIndex];
+            
+            const name = prompt("Material name:", mat.name);
+            if (!name) return;
+            
+            const quantity = prompt("Quantity:", mat.quantity);
+            if (!quantity) return;
+            
+            const price = prompt("Price per unit ($):", mat.price);
+            if (!price) return;
+            
+            proposalData.projects[projectIndex].custom_materials[matIndex] = {
+                name: name,
+                quantity: parseInt(quantity),
+                price: parseFloat(price)
+            };
+            
+            renderProjects();
+        }
+
+        function removeCustomMaterial(projectIndex, matIndex) {
+            proposalData.projects[projectIndex].custom_materials.splice(matIndex, 1);
             renderProjects();
         }
 
