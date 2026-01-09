@@ -2012,17 +2012,18 @@
             
             if (type === 'property') {
                 state.propertyData.property.sketch = dataURL;
-                // FIX: Don't call save() which triggers re-render and navigation restart
-                // Just update localStorage directly to preserve navigation state
+                // Update localStorage directly to preserve navigation state
                 localStorage.setItem('flourish_property_data', 
                     JSON.stringify(state.propertyData.toJSON()));
+                closeSketchCanvas();
+                // Update property sketch display without full re-render
+                updatePropertySketchDisplay();
             } else if (type === 'project') {
                 state.currentProject.sketch = dataURL;
+                closeSketchCanvas();
+                // Update project sketch display without full re-render
+                updateProjectSketchDisplay();
             }
-            
-            closeSketchCanvas();
-            // FIX: Don't call render() - just close modal
-            // render() triggers navigation restart
         }
 
         function closeSketchCanvas() {
@@ -2049,11 +2050,29 @@
             }
         }
 
+        function updatePropertySketchDisplay() {
+            // Re-render just the property form section to show new sketch
+            const main = document.getElementById('main');
+            if (!main) return;
+            
+            // Find the property form container
+            const propertySection = main.querySelector('.bg-white.rounded-lg.shadow.p-6');
+            if (propertySection && state.navigationState === 'property-form') {
+                // Update just the property form
+                propertySection.outerHTML = renderPropertyForm();
+            }
+        }
+
         function updateProjectSketchDisplay() {
-            // Find sketch container and re-render just that section
-            const form = document.querySelector('.bg-white.rounded-lg.shadow.p-6');
-            if (form) {
-                render(); // For now, just re-render. Can optimize later if needed.
+            // Re-render just the project form section to show new sketch
+            const main = document.getElementById('main');
+            if (!main) return;
+            
+            // Find the project form container
+            const projectSection = main.querySelector('.bg-white.rounded-lg.shadow.p-6');
+            if (projectSection && state.navigationState === 'project-form') {
+                // Update just the project form
+                projectSection.outerHTML = renderProjectForm();
             }
         }
 
@@ -2093,10 +2112,17 @@
             if (!plantKey || !DUMMY_PLANTS[plantKey]) return;
             
             const plant = DUMMY_PLANTS[plantKey];
+            
+            // Prompt for quantity
+            const quantity = prompt(`How many ${plantKey}?`, '1');
+            if (!quantity || quantity === '' || isNaN(quantity) || parseInt(quantity) < 1) {
+                return; // User cancelled or invalid input
+            }
+            
             state.currentProject.plants.push({
                 name: plantKey,
                 size: plant.size,
-                quantity: 1,
+                quantity: parseInt(quantity),
                 unit_price: plant.price,
                 spread_inches: plant.spread,
                 role: plant.type === 'tree' ? 'anchor' : 
