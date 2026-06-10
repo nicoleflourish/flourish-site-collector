@@ -434,6 +434,7 @@
                 wall: null,
                 labor_override: null,
                 labor_notes: "",
+                markup_override: null,
                 labor_tasks: [],
                 path: null,
                 photos: [],
@@ -1010,6 +1011,18 @@
                                 class="w-full px-3 py-2 border rounded">
                             <p class="text-xs text-gray-500 mt-1">
                                 Set a fixed labor amount, or leave 0 to auto-calculate based on project scope
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Markup Override % (leave blank for property default)
+                            </label>
+                            <input type="number" step="1" min="0" max="100" placeholder="e.g. 10"
+                                value="${project.markup_override != null ? Math.round(project.markup_override * 100) : ''}"
+                                onchange="updateProject(${index}, 'markup_override', this.value !== '' ? parseFloat(this.value) / 100 : null)"
+                                class="w-full px-3 py-2 border rounded">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Override the property-level markup for this project only
                             </p>
                         </div>
                     </div>
