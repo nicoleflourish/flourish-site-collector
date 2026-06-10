@@ -26,141 +26,93 @@
     <!-- FLOURISH DRIVE INTEGRATION - DO NOT DUPLICATE -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script id="flourish-drive-integration">
-// ============================================================
-// FLOURISH GOOGLE DRIVE INTEGRATION
-// Client ID: 823926075733-ujti95o5qoel7ddp0vbqconv8h1q1cpq.apps.googleusercontent.com
-// Scope: Drive file creation only (does not read other Drive files)
-// ============================================================
+(function() {
+'use strict';
 
 const DRIVE_CLIENT_ID = '823926075733-ujti95o5qoel7ddp0vbqconv8h1q1cpq.apps.googleusercontent.com';
 const DRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive';
-const FLOURISH_FOLDER = 'Flourish Garden Solutions/Clients';
+const FLOURISH_ROOT_ID = '1jxZGvO7WN07eQyKftjv7UOsTNh_nFbBT';
 
 let driveTokenClient = null;
 let driveAccessToken = null;
 
-// ── Initialize Google Identity Services ──────────────────────
 function initDriveAuth() {
-    if (typeof google === 'undefined') {
-        console.warn('Google Identity Services not loaded yet');
-        return;
-    }
+    if (typeof google === 'undefined' || !google.accounts) return;
     driveTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: DRIVE_CLIENT_ID,
         scope: DRIVE_SCOPE,
-        callback: (tokenResponse) => {
-            if (tokenResponse.error) {
-                showDriveStatus('Sign-in failed: ' + tokenResponse.error, 'error');
-                return;
-            }
-            driveAccessToken = tokenResponse.access_token;
-            showDriveStatus('Signed in to Google Drive ✓', 'success');
-            // Run any pending save
-            if (window._pendingDriveSave) {
-                window._pendingDriveSave();
-                window._pendingDriveSave = null;
-            }
+        callback: (resp) => {
+            if (resp.error) { showDriveStatus('Sign-in failed: ' + resp.error, 'error'); return; }
+            driveAccessToken = resp.access_token;
+            showDriveStatus('Signed in to Google Drive', 'success');
+            if (window._pendingDriveSave) { window._pendingDriveSave(); window._pendingDriveSave = null; }
         }
     });
 }
 
-// ── Find or create a folder by name under a parent ───────────
 async function getOrCreateFolder(name, parentId) {
-    // Search for existing folder
     const q = `mimeType='application/vnd.google-apps.folder' and name='${name}' and '${parentId}' in parents and trashed=false`;
     const res = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
         { headers: { Authorization: `Bearer ${driveAccessToken}` } }
     );
     const data = await res.json();
-    console.log('[Drive] Searching "' + name + '" under ' + parentId + ' → found: ' + (data.files ? data.files.length : 'error') + ' results', data);
-    if (data.files && data.files.length > 0) {
-        console.log('[Drive] Using existing folder:', data.files[0].id);
-        return data.files[0].id;
-    }
-
-    // Create it
-    console.log('[Drive] Creating new folder: "' + name + '" under ' + parentId);
+    if (data.files && data.files.length > 0) return data.files[0].id;
     const create = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
-        headers: {
-            Authorization: `Bearer ${driveAccessToken}`,
-            'Content-Type': 'application/json'
-        },
+        headers: { Authorization: `Bearer ${driveAccessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
     });
     const folder = await create.json();
     return folder.id;
 }
 
-// ── Resolve path: Flourish Garden Solutions/Clients/Last_First/YYYY-MM-DD ────
-const FLOURISH_ROOT_ID = '1jxZGvO7WN07eQyKftjv7UOsTNh_nFbBT';  // Flourish Garden Solutions folder
-
 async function resolveDrivePath(clientName, visitDate) {
-    // Use hardcoded folder ID — avoids name-search duplication issues
     let parentId = await getOrCreateFolder('Clients', FLOURISH_ROOT_ID);
-    // Client folder: Last_First
-    const parts   = clientName.trim().split(/\s+/);
-    const last    = parts.length > 1 ? parts[parts.length - 1] : 'Unknown';
-    const first   = parts.length > 1 ? parts.slice(0, -1).join('_') : parts[0];
-    const clientFolder = `${last}_${first}`;
-    parentId = await getOrCreateFolder(clientFolder, parentId);
-    // Date folder
+    const parts = clientName.trim().split(/\s+/);
+    const last  = parts.length > 1 ? parts[parts.length - 1] : 'Unknown';
+    const first = parts.length > 1 ? parts.slice(0, -1).join('_') : parts[0];
+    parentId = await getOrCreateFolder(`${last}_${first}`, parentId);
     parentId = await getOrCreateFolder(visitDate, parentId);
     return parentId;
 }
 
-// ── Upload JSON file to resolved folder ──────────────────────
 async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
     showDriveStatus('Saving to Drive...', 'loading');
     try {
         const folderId = await resolveDrivePath(clientName, visitDate);
-
-        // Check if file already exists in folder — update if so
         const q = `name='${filename}' and '${folderId}' in parents and trashed=false`;
         const search = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
             { headers: { Authorization: `Bearer ${driveAccessToken}` } }
         );
         const found = await search.json();
-
-        const blob    = new Blob([jsonContent], { type: 'application/json' });
-        const form    = new FormData();
-        const meta    = { name: filename, mimeType: 'application/json' };
-
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const form = new FormData();
+        const meta = { name: filename, mimeType: 'application/json' };
         let url, method;
         if (found.files && found.files.length > 0) {
-            // Update existing
-            url    = `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart`;
+            url = `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart`;
             method = 'PATCH';
         } else {
-            // Create new
             meta.parents = [folderId];
-            url    = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+            url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
             method = 'POST';
         }
-
         form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
         form.append('file', blob);
-
-        const res = await fetch(url, {
-            method,
-            headers: { Authorization: `Bearer ${driveAccessToken}` },
-            body: form
-        });
-
+        const res = await fetch(url, { method, headers: { Authorization: `Bearer ${driveAccessToken}` }, body: form });
         if (res.ok) {
-            showDriveStatus(`✓ Saved to Drive: ${FLOURISH_FOLDER}/${filename}`, 'success');
+            showDriveStatus('Saved to Drive: ' + filename, 'success');
         } else {
             const err = await res.json();
-            showDriveStatus('Drive save failed: ' + (err.error?.message || 'unknown error'), 'error');
+            showDriveStatus('Drive save failed: ' + (err.error?.message || 'unknown'), 'error');
         }
     } catch (e) {
         showDriveStatus('Drive save failed: ' + e.message, 'error');
     }
 }
 
-// ── Status indicator ─────────────────────────────────────────
 function showDriveStatus(message, type) {
     const el = document.getElementById('driveStatus');
     if (!el) return;
@@ -170,21 +122,23 @@ function showDriveStatus(message, type) {
     el.style.display = 'block';
 }
 
-// ── Main entry point called by Save to Drive button ──────────
 function saveToDrive(getFilename, getJsonContent, getClientName, getVisitDate) {
     if (!driveAccessToken) {
-        // Store the save action and request sign-in
         window._pendingDriveSave = () =>
             uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
         if (!driveTokenClient) initDriveAuth();
-        driveTokenClient.requestAccessToken();
+        if (driveTokenClient) driveTokenClient.requestAccessToken();
+        else showDriveStatus('Google sign-in not ready, try again in a moment', 'error');
         return;
     }
     uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
 }
 
-// Init on load
+// Expose only what the buttons call
+window.saveToDrive = saveToDrive;
 window.addEventListener('load', initDriveAuth);
+
+})();
 
     </script>
     <!-- END FLOURISH DRIVE INTEGRATION -->
@@ -446,10 +400,16 @@ window.addEventListener('load', initDriveAuth);
             static load() {
                 const saved = localStorage.getItem('flourish_property_data');
                 if (saved) {
-                    const data = JSON.parse(saved);
-                    const property = new PropertyData();
-                    Object.assign(property, data);
-                    return property;
+                    try {
+                        const data = JSON.parse(saved);
+                        const instance = new PropertyData();
+                        if (data.property) Object.assign(instance.property, data.property);
+                        if (data.projects) instance.projects = data.projects;
+                        return instance;
+                    } catch(e) {
+                        console.warn('Load failed, fresh start:', e);
+                        return new PropertyData();
+                    }
                 }
                 return new PropertyData();
             }
@@ -461,13 +421,13 @@ window.addEventListener('load', initDriveAuth);
                     phone: this.property.phone,
                     email: this.property.email,
                     visit_date: this.property.visitDate,
-                    markup_percent: this.property.markupPercent,
                     property_notes: this.property.notes,
                     property_photos: this.property.photos,
                     property_sketch: this.property.sketch,
+                    markup_percent: this.property.markupPercent || 20,
                     projects: this.projects.map(p => p.toJSON()),
                     metadata: {
-                        collected_by: 'Site Collector v5 - Markup Field Added',
+                        collected_by: 'Site Collector v3.1 - Photo Compression, Canvas Fix, Dummy Plants',
                         timestamp: new Date().toISOString()
                     }
                 };
@@ -679,7 +639,7 @@ window.addEventListener('load', initDriveAuth);
                         <input type="number" id="markupPercent" value="${p.markupPercent || 20}" min="0" max="100" step="1"
                             class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500"
                             placeholder="20">
-                        <div class="text-xs text-gray-500 mt-1">Default is 20%. This applies to all materials and labor.</div>
+                        <div class="text-xs text-gray-500 mt-1">Default is 20%. Applies to all materials and labor.</div>
                     </div>
 
                     <!-- Property Notes -->
@@ -1453,14 +1413,9 @@ window.addEventListener('load', initDriveAuth);
                             Download JSON File
                         </button>
                         
-                        <button onclick="saveToDrive(
-                                () => `${state.propertyData.toCalculatorJSON().client_name.replace(/\s+/g,'_')}_${state.propertyData.toCalculatorJSON().visit_date}.json`,
-                                () => JSON.stringify(state.propertyData.toCalculatorJSON(), null, 2),
-                                () => state.propertyData.toCalculatorJSON().client_name,
-                                () => state.propertyData.toCalculatorJSON().visit_date
-                            )"
+                        <button onclick="saveSiteToDrive()"
                             class="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700">
-                            &#9729; Save to Google Drive
+                            Save to Google Drive
                         </button>
                         <div id="driveStatus" style="display:none;font-size:0.85rem;padding:4px 0;"></div>
                         
@@ -2741,6 +2696,17 @@ window.addEventListener('load', initDriveAuth);
         // EXPORT
         // ============================================
 
+        function saveSiteToDrive() {
+            const json = state.propertyData.toCalculatorJSON();
+            const filename = json.client_name.replace(/\s+/g, '_') + '_' + json.visit_date + '.json';
+            saveToDrive(
+                () => filename,
+                () => JSON.stringify(json, null, 2),
+                () => json.client_name,
+                () => json.visit_date
+            );
+        }
+
         function exportJSON() {
             const json = state.propertyData.toCalculatorJSON();
             const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
@@ -2782,7 +2748,7 @@ JSON data attached below (copy and save):
 ${JSON.stringify(json, null, 2)}
 
 ---
-Generated by Flourish Site Collector v3.1 - Photo Compression, Canvas Fix, Dummy Plants
+Generated by Flourish Site Collector v5 - Markup Field Added
 `;
 
             const mailtoLink = `mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
