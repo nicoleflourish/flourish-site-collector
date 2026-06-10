@@ -17,141 +17,122 @@
     <!-- FLOURISH DRIVE INTEGRATION - DO NOT DUPLICATE -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script id="flourish-drive-integration">
-// ============================================================
-// FLOURISH GOOGLE DRIVE INTEGRATION
-// Client ID: 823926075733-ujti95o5qoel7ddp0vbqconv8h1q1cpq.apps.googleusercontent.com
-// Scope: Drive file creation only (does not read other Drive files)
-// ============================================================
+(function() {
+'use strict';
 
 const DRIVE_CLIENT_ID = '823926075733-ujti95o5qoel7ddp0vbqconv8h1q1cpq.apps.googleusercontent.com';
 const DRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive';
-const FLOURISH_FOLDER = 'Flourish Garden Solutions/Clients';
+const FLOURISH_ROOT_ID = '1jxZGvO7WN07eQyKftjv7UOsTNh_nFbBT';
 
 let driveTokenClient = null;
 let driveAccessToken = null;
+let tokenExpiry = 0;            // epoch ms when token expires
 
-// ── Initialize Google Identity Services ──────────────────────
 function initDriveAuth() {
-    if (typeof google === 'undefined') {
-        console.warn('Google Identity Services not loaded yet');
-        return;
-    }
+    if (typeof google === 'undefined' || !google.accounts) return;
     driveTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: DRIVE_CLIENT_ID,
         scope: DRIVE_SCOPE,
-        callback: (tokenResponse) => {
-            if (tokenResponse.error) {
-                showDriveStatus('Sign-in failed: ' + tokenResponse.error, 'error');
-                return;
-            }
-            driveAccessToken = tokenResponse.access_token;
-            showDriveStatus('Signed in to Google Drive ✓', 'success');
-            // Run any pending save
-            if (window._pendingDriveSave) {
-                window._pendingDriveSave();
-                window._pendingDriveSave = null;
-            }
+        callback: (resp) => {
+            if (resp.error) { showDriveStatus('Sign-in failed: ' + resp.error, 'error'); return; }
+            driveAccessToken = resp.access_token;
+            // Tokens last ~3600s; refresh 5 min early to be safe
+            const expiresIn = (resp.expires_in ? parseInt(resp.expires_in) : 3600);
+            tokenExpiry = Date.now() + (expiresIn - 300) * 1000;
+            showDriveStatus('Signed in to Google Drive', 'success');
+            if (window._pendingDriveSave) { window._pendingDriveSave(); window._pendingDriveSave = null; }
         }
     });
 }
 
-// ── Find or create a folder by name under a parent ───────────
+function tokenValid() {
+    return driveAccessToken && Date.now() < tokenExpiry;
+}
+
+function requestSignIn() {
+    if (!driveTokenClient) initDriveAuth();
+    if (driveTokenClient) {
+        driveTokenClient.requestAccessToken();
+    } else {
+        showDriveStatus('Google sign-in not ready, try again in a moment', 'error');
+    }
+}
+
 async function getOrCreateFolder(name, parentId) {
-    // Search for existing folder
     const q = `mimeType='application/vnd.google-apps.folder' and name='${name}' and '${parentId}' in parents and trashed=false`;
     const res = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
         { headers: { Authorization: `Bearer ${driveAccessToken}` } }
     );
+    if (res.status === 401) throw { authError: true };
     const data = await res.json();
-    console.log('[Drive] Searching "' + name + '" under ' + parentId + ' → found: ' + (data.files ? data.files.length : 'error') + ' results', data);
-    if (data.files && data.files.length > 0) {
-        console.log('[Drive] Using existing folder:', data.files[0].id);
-        return data.files[0].id;
-    }
-
-    // Create it
-    console.log('[Drive] Creating new folder: "' + name + '" under ' + parentId);
+    if (data.files && data.files.length > 0) return data.files[0].id;
     const create = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
-        headers: {
-            Authorization: `Bearer ${driveAccessToken}`,
-            'Content-Type': 'application/json'
-        },
+        headers: { Authorization: `Bearer ${driveAccessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
     });
+    if (create.status === 401) throw { authError: true };
     const folder = await create.json();
     return folder.id;
 }
 
-// ── Resolve path: Flourish Garden Solutions/Clients/Last_First/YYYY-MM-DD ────
-const FLOURISH_ROOT_ID = '1jxZGvO7WN07eQyKftjv7UOsTNh_nFbBT';  // Flourish Garden Solutions folder
-
 async function resolveDrivePath(clientName, visitDate) {
-    // Use hardcoded folder ID — avoids name-search duplication issues
     let parentId = await getOrCreateFolder('Clients', FLOURISH_ROOT_ID);
-    // Client folder: Last_First
-    const parts   = clientName.trim().split(/\s+/);
-    const last    = parts.length > 1 ? parts[parts.length - 1] : 'Unknown';
-    const first   = parts.length > 1 ? parts.slice(0, -1).join('_') : parts[0];
-    const clientFolder = `${last}_${first}`;
-    parentId = await getOrCreateFolder(clientFolder, parentId);
-    // Date folder
+    const parts = clientName.trim().split(/\s+/);
+    const last  = parts.length > 1 ? parts[parts.length - 1] : 'Unknown';
+    const first = parts.length > 1 ? parts.slice(0, -1).join('_') : parts[0];
+    parentId = await getOrCreateFolder(`${last}_${first}`, parentId);
     parentId = await getOrCreateFolder(visitDate, parentId);
     return parentId;
 }
 
-// ── Upload JSON file to resolved folder ──────────────────────
 async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
     showDriveStatus('Saving to Drive...', 'loading');
     try {
         const folderId = await resolveDrivePath(clientName, visitDate);
-
-        // Check if file already exists in folder — update if so
         const q = `name='${filename}' and '${folderId}' in parents and trashed=false`;
         const search = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
             { headers: { Authorization: `Bearer ${driveAccessToken}` } }
         );
+        if (search.status === 401) throw { authError: true };
         const found = await search.json();
-
-        const blob    = new Blob([jsonContent], { type: 'application/json' });
-        const form    = new FormData();
-        const meta    = { name: filename, mimeType: 'application/json' };
-
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const form = new FormData();
+        const meta = { name: filename, mimeType: 'application/json' };
         let url, method;
         if (found.files && found.files.length > 0) {
-            // Update existing
-            url    = `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart`;
+            url = `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart`;
             method = 'PATCH';
         } else {
-            // Create new
             meta.parents = [folderId];
-            url    = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+            url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
             method = 'POST';
         }
-
         form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
         form.append('file', blob);
-
-        const res = await fetch(url, {
-            method,
-            headers: { Authorization: `Bearer ${driveAccessToken}` },
-            body: form
-        });
-
+        const res = await fetch(url, { method, headers: { Authorization: `Bearer ${driveAccessToken}` }, body: form });
+        if (res.status === 401) throw { authError: true };
         if (res.ok) {
-            showDriveStatus(`✓ Saved to Drive: ${FLOURISH_FOLDER}/${filename}`, 'success');
+            showDriveStatus('Saved to Drive: ' + filename, 'success');
         } else {
             const err = await res.json();
-            showDriveStatus('Drive save failed: ' + (err.error?.message || 'unknown error'), 'error');
+            showDriveStatus('Drive save failed: ' + (err.error?.message || 'unknown'), 'error');
         }
     } catch (e) {
-        showDriveStatus('Drive save failed: ' + e.message, 'error');
+        if (e && e.authError) {
+            // Token expired mid-flight — re-authenticate and retry this exact save
+            driveAccessToken = null;
+            showDriveStatus('Session expired, re-authenticating...', 'loading');
+            window._pendingDriveSave = () => uploadToDrive(filename, jsonContent, clientName, visitDate);
+            requestSignIn();
+        } else {
+            showDriveStatus('Drive save failed: ' + (e.message || e), 'error');
+        }
     }
 }
 
-// ── Status indicator ─────────────────────────────────────────
 function showDriveStatus(message, type) {
     const el = document.getElementById('driveStatus');
     if (!el) return;
@@ -161,21 +142,21 @@ function showDriveStatus(message, type) {
     el.style.display = 'block';
 }
 
-// ── Main entry point called by Save to Drive button ──────────
 function saveToDrive(getFilename, getJsonContent, getClientName, getVisitDate) {
-    if (!driveAccessToken) {
-        // Store the save action and request sign-in
+    // Proactively check token validity before attempting
+    if (!tokenValid()) {
         window._pendingDriveSave = () =>
             uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
-        if (!driveTokenClient) initDriveAuth();
-        driveTokenClient.requestAccessToken();
+        requestSignIn();
         return;
     }
     uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
 }
 
-// Init on load
+window.saveToDrive = saveToDrive;
 window.addEventListener('load', initDriveAuth);
+
+})();
 
     </script>
     <!-- END FLOURISH DRIVE INTEGRATION -->
@@ -278,14 +259,9 @@ window.addEventListener('load', initDriveAuth);
                 Save Complete Design JSON
             </button>
             
-            <button onclick="saveToDrive(
-                    () => `${proposalData.client_name.replace(/\s+/g,'_')}_${proposalData.visit_date}_DESIGN.json`,
-                    () => JSON.stringify(proposalData, null, 2),
-                    () => proposalData.client_name,
-                    () => proposalData.visit_date
-                )"
+            <button onclick="saveDesignToDrive()"
                 class="w-full bg-green-600 text-white py-4 rounded-lg font-medium text-lg hover:bg-green-700">
-                &#9729; Save to Google Drive
+                Save to Google Drive
             </button>
             <div id="driveStatus" style="display:none;font-size:0.85rem;padding:4px 0;text-align:center;"></div>
             <div class="text-center text-sm text-gray-500">
@@ -1714,6 +1690,16 @@ window.addEventListener('load', initDriveAuth);
 
         function updateProjectComplexityDisplay(index, value) {
             document.getElementById(`project-complexity-display-${index}`).textContent = `${parseFloat(value).toFixed(1)}x`;
+        }
+
+        function saveDesignToDrive() {
+            const filename = proposalData.client_name.replace(/\s+/g, '_') + '_' + proposalData.visit_date + '_DESIGN.json';
+            saveToDrive(
+                () => filename,
+                () => JSON.stringify(proposalData, null, 2),
+                () => proposalData.client_name,
+                () => proposalData.visit_date
+            );
         }
 
         function saveDesignJSON() {

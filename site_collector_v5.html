@@ -35,6 +35,7 @@ const FLOURISH_ROOT_ID = '1jxZGvO7WN07eQyKftjv7UOsTNh_nFbBT';
 
 let driveTokenClient = null;
 let driveAccessToken = null;
+let tokenExpiry = 0;            // epoch ms when token expires
 
 function initDriveAuth() {
     if (typeof google === 'undefined' || !google.accounts) return;
@@ -44,10 +45,26 @@ function initDriveAuth() {
         callback: (resp) => {
             if (resp.error) { showDriveStatus('Sign-in failed: ' + resp.error, 'error'); return; }
             driveAccessToken = resp.access_token;
+            // Tokens last ~3600s; refresh 5 min early to be safe
+            const expiresIn = (resp.expires_in ? parseInt(resp.expires_in) : 3600);
+            tokenExpiry = Date.now() + (expiresIn - 300) * 1000;
             showDriveStatus('Signed in to Google Drive', 'success');
             if (window._pendingDriveSave) { window._pendingDriveSave(); window._pendingDriveSave = null; }
         }
     });
+}
+
+function tokenValid() {
+    return driveAccessToken && Date.now() < tokenExpiry;
+}
+
+function requestSignIn() {
+    if (!driveTokenClient) initDriveAuth();
+    if (driveTokenClient) {
+        driveTokenClient.requestAccessToken();
+    } else {
+        showDriveStatus('Google sign-in not ready, try again in a moment', 'error');
+    }
 }
 
 async function getOrCreateFolder(name, parentId) {
@@ -56,6 +73,7 @@ async function getOrCreateFolder(name, parentId) {
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
         { headers: { Authorization: `Bearer ${driveAccessToken}` } }
     );
+    if (res.status === 401) throw { authError: true };
     const data = await res.json();
     if (data.files && data.files.length > 0) return data.files[0].id;
     const create = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -63,6 +81,7 @@ async function getOrCreateFolder(name, parentId) {
         headers: { Authorization: `Bearer ${driveAccessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
     });
+    if (create.status === 401) throw { authError: true };
     const folder = await create.json();
     return folder.id;
 }
@@ -86,6 +105,7 @@ async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
             { headers: { Authorization: `Bearer ${driveAccessToken}` } }
         );
+        if (search.status === 401) throw { authError: true };
         const found = await search.json();
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const form = new FormData();
@@ -102,6 +122,7 @@ async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
         form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
         form.append('file', blob);
         const res = await fetch(url, { method, headers: { Authorization: `Bearer ${driveAccessToken}` }, body: form });
+        if (res.status === 401) throw { authError: true };
         if (res.ok) {
             showDriveStatus('Saved to Drive: ' + filename, 'success');
         } else {
@@ -109,7 +130,15 @@ async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
             showDriveStatus('Drive save failed: ' + (err.error?.message || 'unknown'), 'error');
         }
     } catch (e) {
-        showDriveStatus('Drive save failed: ' + e.message, 'error');
+        if (e && e.authError) {
+            // Token expired mid-flight — re-authenticate and retry this exact save
+            driveAccessToken = null;
+            showDriveStatus('Session expired, re-authenticating...', 'loading');
+            window._pendingDriveSave = () => uploadToDrive(filename, jsonContent, clientName, visitDate);
+            requestSignIn();
+        } else {
+            showDriveStatus('Drive save failed: ' + (e.message || e), 'error');
+        }
     }
 }
 
@@ -123,18 +152,16 @@ function showDriveStatus(message, type) {
 }
 
 function saveToDrive(getFilename, getJsonContent, getClientName, getVisitDate) {
-    if (!driveAccessToken) {
+    // Proactively check token validity before attempting
+    if (!tokenValid()) {
         window._pendingDriveSave = () =>
             uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
-        if (!driveTokenClient) initDriveAuth();
-        if (driveTokenClient) driveTokenClient.requestAccessToken();
-        else showDriveStatus('Google sign-in not ready, try again in a moment', 'error');
+        requestSignIn();
         return;
     }
     uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
 }
 
-// Expose only what the buttons call
 window.saveToDrive = saveToDrive;
 window.addEventListener('load', initDriveAuth);
 
