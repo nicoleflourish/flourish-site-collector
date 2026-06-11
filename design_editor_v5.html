@@ -87,6 +87,93 @@ async function resolveDrivePath(clientName, visitDate) {
     return parentId;
 }
 
+// ── Upload a single base64 image into the images/ subfolder ──
+async function uploadImageToDrive(imagesFolderId, filename, base64Data) {
+    // Strip data URL prefix → raw base64 → binary blob
+    const commaIdx = base64Data.indexOf(',');
+    const raw = commaIdx >= 0 ? base64Data.substring(commaIdx + 1) : base64Data;
+    const byteChars = atob(raw);
+    const byteArray = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+    // Check if file already exists → update, else create
+    const q = `name='${filename}' and '${imagesFolderId}' in parents and trashed=false`;
+    const search = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+        { headers: { Authorization: `Bearer ${driveAccessToken}` } }
+    );
+    if (search.status === 401) throw { authError: true };
+    const found = await search.json();
+
+    const meta = { name: filename, mimeType: 'image/jpeg' };
+    const form = new FormData();
+    let url, method;
+    if (found.files && found.files.length > 0) {
+        url = `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart`;
+        method = 'PATCH';
+    } else {
+        meta.parents = [imagesFolderId];
+        url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+        method = 'POST';
+    }
+    form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+    form.append('file', blob);
+    const res = await fetch(url, { method, headers: { Authorization: `Bearer ${driveAccessToken}` }, body: form });
+    if (res.status === 401) throw { authError: true };
+    if (!res.ok) throw new Error('Image upload failed for ' + filename);
+}
+
+// ── Process a photos array: upload base64 images, return list with images/ paths ──
+async function processPhotos(photoList, imagesFolderId, prefix) {
+    if (!photoList || photoList.length === 0) return photoList;
+    const result = [];
+    let counter = 1;
+    for (const entry of photoList) {
+        // Normalize to {image, caption}
+        const imgData = (typeof entry === 'string') ? entry : entry.image;
+        const caption = (typeof entry === 'object' && entry.caption) ? entry.caption : '';
+
+        // Already a path (not base64) — leave as-is
+        if (typeof imgData === 'string' && !imgData.startsWith('data:')) {
+            result.push(entry);
+            continue;
+        }
+
+        const filename = `${prefix}_${counter}.jpg`;
+        await uploadImageToDrive(imagesFolderId, filename, imgData);
+        // Preserve caption format if original had one
+        if (typeof entry === 'object') {
+            result.push({ image: `images/${filename}`, caption });
+        } else {
+            result.push(`images/${filename}`);
+        }
+        counter++;
+    }
+    return result;
+}
+
+// ── Upload all images in a proposal object, mutating paths in place ──
+async function uploadAllImages(dataObj, clientName, visitDate) {
+    const dateFolderId = await resolveDrivePath(clientName, visitDate);
+    const imagesFolderId = await getOrCreateFolder('images', dateFolderId);
+
+    // Property-level photos
+    if (dataObj.property_photos && dataObj.property_photos.length) {
+        dataObj.property_photos = await processPhotos(dataObj.property_photos, imagesFolderId, 'property');
+    }
+    // Per-project photos
+    if (dataObj.projects) {
+        for (const proj of dataObj.projects) {
+            if (proj.photos && proj.photos.length) {
+                const safeName = (proj.name || 'project').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+                proj.photos = await processPhotos(proj.photos, imagesFolderId, safeName || 'project');
+            }
+        }
+    }
+    return dataObj;
+}
+
 async function uploadToDrive(filename, jsonContent, clientName, visitDate) {
     showDriveStatus('Saving to Drive...', 'loading');
     try {
@@ -153,7 +240,37 @@ function saveToDrive(getFilename, getJsonContent, getClientName, getVisitDate) {
     uploadToDrive(getFilename(), getJsonContent(), getClientName(), getVisitDate());
 }
 
+// Save with image extraction: uploads base64 photos to images/, then saves cleaned JSON
+async function saveToDriveWithImages(getFilename, getDataObject, getClientName, getVisitDate) {
+    if (!tokenValid()) {
+        window._pendingDriveSave = () =>
+            saveToDriveWithImages(getFilename, getDataObject, getClientName, getVisitDate);
+        requestSignIn();
+        return;
+    }
+    showDriveStatus('Uploading photos...', 'loading');
+    try {
+        const clientName = getClientName();
+        const visitDate  = getVisitDate();
+        const dataObj    = getDataObject();           // live object — will be mutated
+        await uploadAllImages(dataObj, clientName, visitDate);
+        // Now save the JSON with images/ paths instead of base64
+        await uploadToDrive(getFilename(), JSON.stringify(dataObj, null, 2), clientName, visitDate);
+    } catch (e) {
+        if (e && e.authError) {
+            driveAccessToken = null;
+            showDriveStatus('Session expired, re-authenticating...', 'loading');
+            window._pendingDriveSave = () =>
+                saveToDriveWithImages(getFilename, getDataObject, getClientName, getVisitDate);
+            requestSignIn();
+        } else {
+            showDriveStatus('Save failed: ' + (e.message || e), 'error');
+        }
+    }
+}
+
 window.saveToDrive = saveToDrive;
+window.saveToDriveWithImages = saveToDriveWithImages;
 window.addEventListener('load', initDriveAuth);
 
 })();
@@ -1694,9 +1811,9 @@ window.addEventListener('load', initDriveAuth);
 
         function saveDesignToDrive() {
             const filename = proposalData.client_name.replace(/\s+/g, '_') + '_' + proposalData.visit_date + '_DESIGN.json';
-            saveToDrive(
+            saveToDriveWithImages(
                 () => filename,
-                () => JSON.stringify(proposalData, null, 2),
+                () => proposalData,                  // pass live object so images can be extracted
                 () => proposalData.client_name,
                 () => proposalData.visit_date
             );
