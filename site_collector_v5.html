@@ -278,6 +278,59 @@ async function saveToDriveWithImages(getFilename, getDataObject, getClientName, 
     }
 }
 
+
+// ── Cloud proposal generation (Sprint 2 backend) ──
+const FLOURISH_CLOUD_URL = 'https://flourish-proposal-823926075733.us-central1.run.app';  // set after deploy, e.g. https://flourish-proposal-xxxxx.run.app
+
+async function generateProposalCloud(getDataObject, excelOnly) {
+    if (!tokenValid()) {
+        window._pendingDriveSave = () => generateProposalCloud(getDataObject, excelOnly);
+        requestSignIn();
+        return;
+    }
+    if (FLOURISH_CLOUD_URL.startsWith('REPLACE')) {
+        showDriveStatus('Cloud URL not set yet', 'error');
+        return;
+    }
+    showDriveStatus(excelOnly ? 'Generating Excel...' : 'Generating full proposal...', 'loading');
+    try {
+        const data = getDataObject();
+        const endpoint = FLOURISH_CLOUD_URL + '/generate' + (excelOnly ? '?excel_only=1' : '');
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + driveAccessToken
+            },
+            body: JSON.stringify(data)
+        });
+        if (res.status === 401) { driveAccessToken = null; throw { authError: true }; }
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showDriveStatus('Cloud generation failed: ' + (err.error || res.status), 'error');
+            return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const name = (data.client_name || 'Client').replace(/\s+/g, '_');
+        a.href = url; a.download = name + (excelOnly ? '_proposal.xlsx' : '_proposal.zip');
+        a.click();
+        URL.revokeObjectURL(url);
+        showDriveStatus('Proposal downloaded', 'success');
+    } catch (e) {
+        if (e && e.authError) {
+            window._pendingDriveSave = () => generateProposalCloud(getDataObject, excelOnly);
+            showDriveStatus('Session expired, re-authenticating...', 'loading');
+            requestSignIn();
+        } else {
+            showDriveStatus('Cloud generation failed: ' + (e.message || e), 'error');
+        }
+    }
+}
+
+window.generateProposalCloud = generateProposalCloud;
+
 window.saveToDrive = saveToDrive;
 window.saveToDriveWithImages = saveToDriveWithImages;
 window.addEventListener('load', initDriveAuth);
@@ -1561,6 +1614,16 @@ window.addEventListener('load', initDriveAuth);
                             class="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700">
                             Save to Google Drive
                         </button>
+                        
+                        <button onclick="generateSiteExcel()"
+                            class="w-full bg-purple-600 text-white py-3 rounded-lg font-medium hover:bg-purple-700">
+                            Generate Excel Only
+                        </button>
+                        
+                        <button onclick="generateSiteCloud()"
+                            class="w-full bg-purple-700 text-white py-3 rounded-lg font-medium hover:bg-purple-800">
+                            Generate All Docs
+                        </button>
                         <div id="driveStatus" style="display:none;font-size:0.85rem;padding:4px 0;"></div>
                         
                         <button onclick="emailJSON()" 
@@ -2839,6 +2902,16 @@ window.addEventListener('load', initDriveAuth);
         // ============================================
         // EXPORT
         // ============================================
+
+        function generateSiteCloud() {
+            const json = state.propertyData.toCalculatorJSON();
+            generateProposalCloud(() => json, false);
+        }
+
+        function generateSiteExcel() {
+            const json = state.propertyData.toCalculatorJSON();
+            generateProposalCloud(() => json, true);
+        }
 
         function saveSiteToDrive() {
             const json = state.propertyData.toCalculatorJSON();
