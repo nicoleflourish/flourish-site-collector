@@ -407,6 +407,26 @@ window.addEventListener('load', initDriveAuth);
                     <!-- Property sketch will be displayed here -->
                 </div>
             </div>
+
+            <!-- Property Photos -->
+            <div id="propertyPhotosContainer" class="hidden border-t pt-4">
+                <h3 class="font-bold text-gray-800 mb-3">Property Photos</h3>
+                <div class="flex gap-2 mb-3">
+                    <label class="flex-1 cursor-pointer bg-blue-100 text-blue-700 py-2 px-3 rounded text-center text-sm hover:bg-blue-200">
+                        + Add Photos
+                        <input type="file" accept="image/jpeg,image/jpg,image/png" multiple
+                            onchange="handlePropertyPhotos(this, 'photo')" class="hidden">
+                    </label>
+                    <label class="flex-1 cursor-pointer bg-purple-100 text-purple-700 py-2 px-3 rounded text-center text-sm hover:bg-purple-200">
+                        + Add 3D Render (high-res)
+                        <input type="file" accept="image/jpeg,image/jpg,image/png" multiple
+                            onchange="handlePropertyPhotos(this, 'render')" class="hidden">
+                    </label>
+                </div>
+                <div id="propertyPhotosDisplay" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <!-- Property photos rendered here -->
+                </div>
+            </div>
         </div>
 
         <!-- Projects List -->
@@ -733,6 +753,8 @@ window.addEventListener('load', initDriveAuth);
             }
             
             renderProjects();
+            document.getElementById('propertyPhotosContainer').classList.remove('hidden');
+            renderPropertyPhotos();
             document.getElementById('projectsList').classList.remove('hidden');
             document.getElementById('addProjectSection').classList.remove('hidden');
             document.getElementById('actionButtons').classList.remove('hidden');
@@ -740,6 +762,110 @@ window.addEventListener('load', initDriveAuth);
 
         function updateClientInfo(field, value) {
             proposalData[field] = value;
+        }
+
+        // ========================================
+        // IMAGE HANDLING (property + per-project)
+        // ========================================
+
+        // Compress an image. mode='photo' = aggressive (1200px/72%),
+        // mode='render' = light touch (2000px/92%) to preserve 3D render detail.
+        function compressDesignImage(dataURL, mode) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxW = (mode === 'render') ? 2000 : 1200;
+                    const quality = (mode === 'render') ? 0.92 : 0.72;
+                    let { width, height } = img;
+                    if (width > maxW) {
+                        height = Math.round(height * (maxW / width));
+                        width = maxW;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = () => resolve(dataURL); // fall back to original
+                img.src = dataURL;
+            });
+        }
+
+        // Handle files chosen for property-level photos
+        async function handlePropertyPhotos(input, mode) {
+            if (!proposalData.property_photos) proposalData.property_photos = [];
+            for (const file of input.files) {
+                const dataURL = await readFileAsDataURL(file);
+                const compressed = await compressDesignImage(dataURL, mode);
+                proposalData.property_photos.push({ image: compressed, caption: '', hires: (mode === 'render') });
+            }
+            input.value = '';
+            renderPropertyPhotos();
+        }
+
+        // Handle files chosen for a specific project
+        async function handleProjectPhotos(input, projectIndex, mode) {
+            const proj = proposalData.projects[projectIndex];
+            if (!proj.photos) proj.photos = [];
+            for (const file of input.files) {
+                const dataURL = await readFileAsDataURL(file);
+                const compressed = await compressDesignImage(dataURL, mode);
+                proj.photos.push({ image: compressed, caption: '', hires: (mode === 'render') });
+            }
+            input.value = '';
+            renderProjects();
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removePropertyPhoto(index) {
+            proposalData.property_photos.splice(index, 1);
+            renderPropertyPhotos();
+        }
+
+        function removeProjectPhoto(projectIndex, photoIndex) {
+            proposalData.projects[projectIndex].photos.splice(photoIndex, 1);
+            renderProjects();
+        }
+
+        function updatePropertyPhotoCaption(index, caption) {
+            proposalData.property_photos[index].caption = caption;
+        }
+
+        function updateProjectPhotoCaption(projectIndex, photoIndex, caption) {
+            proposalData.projects[projectIndex].photos[photoIndex].caption = caption;
+        }
+
+        // Render property photo thumbnails + caption inputs
+        function renderPropertyPhotos() {
+            const container = document.getElementById('propertyPhotosDisplay');
+            if (!container) return;
+            const photos = proposalData.property_photos || [];
+            container.innerHTML = photos.map((p, i) => {
+                const src = (typeof p === 'string') ? p : p.image;
+                const caption = (typeof p === 'object' && p.caption) ? p.caption : '';
+                const isPath = typeof src === 'string' && src.startsWith('images/');
+                const thumb = isPath
+                    ? `<div class="w-full h-32 bg-gray-100 flex items-center justify-center text-xs text-gray-500 rounded">${src}</div>`
+                    : `<img src="${src}" class="w-full h-32 object-cover rounded">`;
+                return `
+                    <div class="border rounded-lg p-2 bg-gray-50">
+                        ${thumb}
+                        <input type="text" value="${caption.replace(/"/g,'&quot;')}" placeholder="Caption (optional)"
+                            onchange="updatePropertyPhotoCaption(${i}, this.value)"
+                            class="w-full mt-2 px-2 py-1 border rounded text-sm">
+                        <button onclick="removePropertyPhoto(${i})"
+                            class="w-full mt-1 text-red-600 text-sm hover:text-red-800">Remove</button>
+                    </div>`;
+            }).join('');
         }
 
         function addNewProject() {
@@ -879,7 +1005,54 @@ window.addEventListener('load', initDriveAuth);
         }
 
         function renderProjectEditor(project, index) {
+            const photos = project.photos || [];
+            const photosHtml = photos.map((p, pi) => {
+                const src = (typeof p === 'string') ? p : p.image;
+                const caption = (typeof p === 'object' && p.caption) ? p.caption : '';
+                const isPath = typeof src === 'string' && src.startsWith('images/');
+                const thumb = isPath
+                    ? `<div class="w-full h-32 bg-gray-100 flex items-center justify-center text-xs text-gray-500 rounded">${src}</div>`
+                    : `<img src="${src}" class="w-full h-32 object-cover rounded">`;
+                return `
+                    <div class="border rounded-lg p-2 bg-gray-50">
+                        ${thumb}
+                        <input type="text" value="${caption.replace(/"/g,'&quot;')}" placeholder="Caption (optional)"
+                            onchange="updateProjectPhotoCaption(${index}, ${pi}, this.value)"
+                            class="w-full mt-2 px-2 py-1 border rounded text-sm">
+                        <button onclick="removeProjectPhoto(${index}, ${pi})"
+                            class="w-full mt-1 text-red-600 text-sm hover:text-red-800">Remove</button>
+                    </div>`;
+            }).join('');
+
             return `
+                <!-- Project Photos & Design Images -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Project Photos & Design Images</h3>
+                    <div class="flex gap-2 mb-3">
+                        <label class="flex-1 cursor-pointer bg-blue-100 text-blue-700 py-2 px-3 rounded text-center text-sm hover:bg-blue-200">
+                            + Add Photos
+                            <input type="file" accept="image/jpeg,image/jpg,image/png" multiple
+                                onchange="handleProjectPhotos(this, ${index}, 'photo')" class="hidden">
+                        </label>
+                        <label class="flex-1 cursor-pointer bg-purple-100 text-purple-700 py-2 px-3 rounded text-center text-sm hover:bg-purple-200">
+                            + Add 3D Render (high-res)
+                            <input type="file" accept="image/jpeg,image/jpg,image/png" multiple
+                                onchange="handleProjectPhotos(this, ${index}, 'render')" class="hidden">
+                        </label>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        ${photosHtml}
+                    </div>
+                </div>
+
+                <!-- Design Comments -->
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-gray-800 mb-3">Design Comments</h3>
+                    <textarea rows="3" placeholder="Notes about this project's design (appears in the proposal)"
+                        onchange="updateProject(${index}, 'notes', this.value)"
+                        class="w-full px-3 py-2 border rounded">${(project.notes || '').replace(/</g,'&lt;')}</textarea>
+                </div>
+
                 <!-- Project Sketch -->
                 ${project.sketch ? `
                 <div class="border-t pt-4">
